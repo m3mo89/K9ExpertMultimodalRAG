@@ -20,3 +20,18 @@ class ValidationError(DomainError):
 class ModelUnavailableError(DomainError):
     def __init__(self, message: str = "El modelo local no está disponible.") -> None:
         super().__init__("model_unavailable", message, retryable=True)
+
+
+class OcrUnavailableError(DomainError):
+    def __init__(self, message: str = "El motor OCR local no está disponible.") -> None:
+        super().__init__("ocr_unavailable", message, retryable=True)
+
+
+class OcrTimeoutError(DomainError):
+    def __init__(self, message: str = "El OCR excedió el tiempo límite.") -> None:
+        super().__init__("ocr_timeout", message, retryable=True)
+
+
+class OcrExecutionError(DomainError):
+    def __init__(self, message: str = "El OCR no pudo procesar la página.") -> None:
+        super().__init__("ocr_failed", message, retryable=False)

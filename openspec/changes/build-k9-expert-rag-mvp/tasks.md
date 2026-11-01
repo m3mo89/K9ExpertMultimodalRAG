@@ -34,16 +34,16 @@
 - [x] 4.3 Implement the create-document and create-version use cases that atomically store metadata, stage a file, and enqueue a persistent job
 - [x] 4.4 Implement versioned REST contracts for document upload, replacement, listing, version inspection, job inspection, and stable API errors
 - [x] 4.5 Add authorization checks before upload or replacement and verify unauthorized requests leave no files or records behind
-- [ ] 4.6 Add integration tests for valid, corrupt, spoofed, oversized, encrypted, duplicate, and interrupted uploads
+- [x] 4.6 Add integration tests for valid, corrupt, spoofed, oversized, encrypted, duplicate, and interrupted uploads
 
 ## 5. Extraction, OCR, and Structured Chunking
 
 - [x] 5.1 Implement page-by-page direct PDF extraction with page geometry, blocks, extraction version, and quality indicators
 - [x] 5.2 Implement the configurable page-quality classifier that selects direct text or requests OCR
-- [ ] 5.3 Implement the OCR adapter with Spanish language configuration, bounded rasterization, timeouts, provenance, and typed failures
-- [ ] 5.4 Implement cache keys and storage for extraction and OCR results based on content and tool versions
-- [ ] 5.5 Implement section and heading detection that preserves document hierarchy without claiming unverified breed metadata
-- [ ] 5.6 Implement page-aware chunking with stable hashes, overlap policy, covered pages, token estimates, and chunking version
+- [x] 5.3 Implement the OCR adapter with Spanish language configuration, bounded rasterization, timeouts, provenance, and typed failures
+- [x] 5.4 Implement cache keys and storage for extraction and OCR results based on content and tool versions
+- [x] 5.5 Implement section and heading detection that preserves document hierarchy without claiming unverified breed metadata
+- [x] 5.6 Implement page-aware chunking with stable hashes, overlap policy, covered pages, token estimates, and chunking version
 - [ ] 5.7 Add golden tests using representative pages from the encyclopedia for direct extraction, OCR selection, hierarchy, and page-resolvable chunks
 - [ ] 5.8 Implement idempotent worker stages and checkpoints from extraction through persisted fragments, including restart and retry tests
 
