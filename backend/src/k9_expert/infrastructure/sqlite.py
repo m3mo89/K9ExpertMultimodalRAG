@@ -85,7 +85,9 @@ class SqliteDatabase:
         with self.connect() as connection:
             current = connection.execute("PRAGMA user_version").fetchone()[0]
             if current > SCHEMA_VERSION:
-                raise UnsupportedSchemaError(f"database schema {current} is newer than {SCHEMA_VERSION}")
+                raise UnsupportedSchemaError(
+                    f"database schema {current} is newer than {SCHEMA_VERSION}"
+                )
             if current == 0:
                 connection.executescript(SCHEMA)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -111,12 +113,22 @@ class DocumentRepository:
     def __init__(self, database: SqliteDatabase) -> None:
         self.database = database
 
-    def create_document(self, document_id: UUID, title: str, author: str | None, category: str | None) -> None:
+    def create_document(
+        self, document_id: UUID, title: str, author: str | None, category: str | None
+    ) -> None:
         timestamp = now()
         with self.database.transaction() as connection:
             connection.execute(
                 "INSERT INTO documents VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
-                (str(document_id), title, author, category, DocumentStatus.CANDIDATE, timestamp, timestamp),
+                (
+                    str(document_id),
+                    title,
+                    author,
+                    category,
+                    DocumentStatus.CANDIDATE,
+                    timestamp,
+                    timestamp,
+                ),
             )
 
     def create_version(
@@ -125,13 +137,130 @@ class DocumentRepository:
         with self.database.transaction() as connection:
             connection.execute(
                 "INSERT INTO document_versions (id, document_id, content_hash, source_filename, file_path, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (str(version_id), str(document_id), content_hash, filename, file_path, DocumentStatus.CANDIDATE, now()),
+                (
+                    str(version_id),
+                    str(document_id),
+                    content_hash,
+                    filename,
+                    file_path,
+                    DocumentStatus.CANDIDATE,
+                    now(),
+                ),
+            )
+
+    def create_document_version_and_job(
+        self,
+        document_id: UUID,
+        version_id: UUID,
+        job_id: UUID,
+        title: str,
+        author: str | None,
+        category: str | None,
+        content_hash: str,
+        filename: str,
+        file_path: str,
+    ) -> None:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO documents VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+                (
+                    str(document_id),
+                    title,
+                    author,
+                    category,
+                    DocumentStatus.CANDIDATE,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO document_versions (id, document_id, content_hash, source_filename, file_path, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(version_id),
+                    str(document_id),
+                    content_hash,
+                    filename,
+                    file_path,
+                    DocumentStatus.CANDIDATE,
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO ingestion_jobs (id, version_id, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (str(job_id), str(version_id), JobStage.RECEIVED, timestamp, timestamp),
+            )
+
+    def create_version_and_job(
+        self,
+        version_id: UUID,
+        job_id: UUID,
+        document_id: str,
+        content_hash: str,
+        filename: str,
+        file_path: str,
+    ) -> None:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            existing = connection.execute(
+                "SELECT 1 FROM documents WHERE id = ?", (document_id,)
+            ).fetchone()
+            if existing is None:
+                raise KeyError("document_not_found")
+            connection.execute(
+                "INSERT INTO document_versions (id, document_id, content_hash, source_filename, file_path, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(version_id),
+                    document_id,
+                    content_hash,
+                    filename,
+                    file_path,
+                    DocumentStatus.CANDIDATE,
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO ingestion_jobs (id, version_id, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (str(job_id), str(version_id), JobStage.RECEIVED, timestamp, timestamp),
             )
 
     def active_snapshot_id(self) -> str | None:
         with self.database.connect() as connection:
-            row = connection.execute("SELECT value FROM system_state WHERE key = 'active_snapshot_id'").fetchone()
+            row = connection.execute(
+                "SELECT value FROM system_state WHERE key = 'active_snapshot_id'"
+            ).fetchone()
         return None if row is None else str(row["value"])
+
+    def find_version_by_content_hash(self, content_hash: str) -> str | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM document_versions WHERE content_hash = ?", (content_hash,)
+            ).fetchone()
+        return None if row is None else str(row["id"])
+
+    def list_documents(self) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    "SELECT id, title, author, category, status, active_version_id FROM documents ORDER BY created_at"
+                )
+            )
+
+    def versions(self, document_id: str) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    "SELECT id, content_hash, source_filename, edition, status, created_at FROM document_versions WHERE document_id = ? ORDER BY created_at DESC",
+                    (document_id,),
+                )
+            )
+
+    def job(self, job_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            result = connection.execute(
+                "SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        return None if result is None else cast(sqlite3.Row, result)
 
 
 class JobRepository:

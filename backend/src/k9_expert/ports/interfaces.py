@@ -53,4 +53,3 @@ class TraceSink(Protocol):
 
 class JobExecutor(Protocol):
     def run_once(self) -> bool: ...
-

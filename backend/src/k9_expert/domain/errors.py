@@ -20,4 +20,3 @@ class ValidationError(DomainError):
 class ModelUnavailableError(DomainError):
     def __init__(self, message: str = "El modelo local no está disponible.") -> None:
         super().__init__("model_unavailable", message, retryable=True)
-

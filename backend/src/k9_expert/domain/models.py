@@ -106,4 +106,3 @@ class TraceEvent:
     event: str
     occurred_at: datetime
     attributes: dict[str, str | int | float | bool | None]
-

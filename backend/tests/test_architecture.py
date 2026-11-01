@@ -31,4 +31,3 @@ def test_presentation_does_not_import_infrastructure_adapters() -> None:
     assert not any(name.startswith("k9_expert.infrastructure") for name in imports)
     assert "ollama" not in imports
     assert "chromadb" not in imports
-

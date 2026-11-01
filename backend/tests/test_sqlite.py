@@ -3,7 +3,11 @@ from uuid import uuid4
 
 import pytest
 
-from k9_expert.infrastructure.filesystem import ManagedFileStore
+from k9_expert.infrastructure.filesystem import (
+    ManagedFileStore,
+    StagedFile,
+    StagedFileNotFoundError,
+)
 from k9_expert.infrastructure.sqlite import (
     ContentRepository,
     DocumentRepository,
@@ -41,10 +45,24 @@ def test_managed_file_store_uses_content_hash_and_atomic_destination(tmp_path: P
     source = tmp_path / "source.pdf"
     source.write_bytes(b"%PDF-1.7 sample")
     store = ManagedFileStore(tmp_path / "managed")
-    digest = store.sha256(source)
-    destination = store.put(source, digest)
+    with source.open("rb") as handle:
+        staged = store.stage(handle, max_bytes=1024)
+    destination = store.promote(staged)
     assert destination.read_bytes() == source.read_bytes()
-    assert destination.parent.parent == (tmp_path / "managed").resolve()
+    assert destination.parent.parent == (tmp_path / "managed" / "documents").resolve()
+    assert not staged.path.exists()
+
+
+def test_file_store_rejects_oversized_and_external_staging_paths(tmp_path: Path) -> None:
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"012345")
+    store = ManagedFileStore(tmp_path / "managed")
+    with source.open("rb") as handle:
+        with pytest.raises(ValueError, match="upload_too_large"):
+            store.stage(handle, max_bytes=5)
+    invalid = StagedFile(source, "not-used", source.stat().st_size)
+    with pytest.raises(StagedFileNotFoundError):
+        store.discard(invalid)
 
 
 def test_content_preserves_page_provenance_and_fragment_coverage(tmp_path: Path) -> None:

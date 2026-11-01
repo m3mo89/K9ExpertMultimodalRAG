@@ -23,23 +23,23 @@
 - [x] 3.2 Extend the schema for conversations, queries, answers, citation snapshots, feedback, traces, confirmation tokens, and audit events
 - [x] 3.3 Implement transactional repositories and unit tests for document/version lifecycle and active snapshot lookup
 - [x] 3.4 Implement transactional repositories and unit tests for persistent job claiming, leases, retries, checkpoints, and worker recovery
-- [ ] 3.5 Implement managed file storage using internal identifiers, atomic moves, content hashes, path traversal protection, and staged cleanup
+- [x] 3.5 Implement managed file storage using internal identifiers, atomic moves, content hashes, path traversal protection, and staged cleanup
 - [x] 3.6 Implement fragment and page repositories that preserve physical pages, printed labels, section paths, extraction provenance, and stable content hashes
 - [x] 3.7 Implement a schema migration and startup compatibility check that fails safely on unsupported database versions
 
 ## 4. Secure Upload and Document Registration
 
-- [ ] 4.1 Implement streaming upload limits and validation for PDF signature, detected MIME, integrity, encryption state, size, and page count
-- [ ] 4.2 Implement SHA-256 duplicate detection and an explicit duplicate-conflict result before searchable records are created
-- [ ] 4.3 Implement the create-document and create-version use cases that atomically store metadata, stage a file, and enqueue a persistent job
-- [ ] 4.4 Implement versioned REST contracts for document upload, replacement, listing, version inspection, job inspection, and stable API errors
-- [ ] 4.5 Add authorization checks before upload or replacement and verify unauthorized requests leave no files or records behind
+- [x] 4.1 Implement streaming upload limits and validation for PDF signature, detected MIME, integrity, encryption state, size, and page count
+- [x] 4.2 Implement SHA-256 duplicate detection and an explicit duplicate-conflict result before searchable records are created
+- [x] 4.3 Implement the create-document and create-version use cases that atomically store metadata, stage a file, and enqueue a persistent job
+- [x] 4.4 Implement versioned REST contracts for document upload, replacement, listing, version inspection, job inspection, and stable API errors
+- [x] 4.5 Add authorization checks before upload or replacement and verify unauthorized requests leave no files or records behind
 - [ ] 4.6 Add integration tests for valid, corrupt, spoofed, oversized, encrypted, duplicate, and interrupted uploads
 
 ## 5. Extraction, OCR, and Structured Chunking
 
-- [ ] 5.1 Implement page-by-page direct PDF extraction with page geometry, blocks, extraction version, and quality indicators
-- [ ] 5.2 Implement the configurable page-quality classifier that selects direct text or requests OCR
+- [x] 5.1 Implement page-by-page direct PDF extraction with page geometry, blocks, extraction version, and quality indicators
+- [x] 5.2 Implement the configurable page-quality classifier that selects direct text or requests OCR
 - [ ] 5.3 Implement the OCR adapter with Spanish language configuration, bounded rasterization, timeouts, provenance, and typed failures
 - [ ] 5.4 Implement cache keys and storage for extraction and OCR results based on content and tool versions
 - [ ] 5.5 Implement section and heading detection that preserves document hierarchy without claiming unverified breed metadata
