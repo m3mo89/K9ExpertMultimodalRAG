@@ -203,6 +203,9 @@ class PdfExtractor:
         finally:
             document.close()
 
+    def extract_path(self, path: str) -> list[ExtractedPage]:
+        return self.extract(Path(path))
+
 
 class OcrPolicy:
     def __init__(self, min_characters: int = 40, min_tokens: int = 8) -> None:

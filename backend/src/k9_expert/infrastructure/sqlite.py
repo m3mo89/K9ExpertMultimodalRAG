@@ -292,6 +292,35 @@ class JobRepository:
             ).fetchone()
             return cast(sqlite3.Row, claimed)
 
+    def update_stage(self, job_id: str, stage: JobStage, checkpoint: str | None = None) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE ingestion_jobs SET stage = ?, checkpoint = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
+                (stage, checkpoint, now(), job_id),
+            )
+
+    def fail(self, job_id: str, code: str, message: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE ingestion_jobs SET stage = ?, error_code = ?, error_message = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
+                (JobStage.ERROR, code, message, now(), job_id),
+            )
+
+    def retry(self, job_id: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE ingestion_jobs SET stage = ?, error_code = NULL, error_message = NULL, lease_until = NULL, updated_at = ? WHERE id = ? AND stage = ?",
+                (JobStage.RECEIVED, now(), job_id, JobStage.ERROR),
+            )
+
+    def context(self, job_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT j.id, j.version_id, v.file_path FROM ingestion_jobs j JOIN document_versions v ON v.id = j.version_id WHERE j.id = ?",
+                (job_id,),
+            ).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
 
 class ContentRepository:
     def __init__(self, database: SqliteDatabase) -> None:
@@ -318,6 +347,11 @@ class ContentRepository:
                     extraction_method,
                 ),
             )
+
+    def clear_version_content(self, version_id: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute("DELETE FROM fragments WHERE version_id = ?", (version_id,))
+            connection.execute("DELETE FROM pages WHERE version_id = ?", (version_id,))
 
     def add_fragment(
         self,

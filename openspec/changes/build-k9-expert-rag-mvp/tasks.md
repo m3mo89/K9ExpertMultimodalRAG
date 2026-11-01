@@ -44,8 +44,8 @@
 - [x] 5.4 Implement cache keys and storage for extraction and OCR results based on content and tool versions
 - [x] 5.5 Implement section and heading detection that preserves document hierarchy without claiming unverified breed metadata
 - [x] 5.6 Implement page-aware chunking with stable hashes, overlap policy, covered pages, token estimates, and chunking version
-- [ ] 5.7 Add golden tests using representative pages from the encyclopedia for direct extraction, OCR selection, hierarchy, and page-resolvable chunks
-- [ ] 5.8 Implement idempotent worker stages and checkpoints from extraction through persisted fragments, including restart and retry tests
+- [x] 5.7 Add golden tests using representative pages from the encyclopedia for direct extraction, OCR selection, hierarchy, and page-resolvable chunks
+- [x] 5.8 Implement idempotent worker stages and checkpoints from extraction through persisted fragments, including restart and retry tests
 
 ## 6. Embeddings, Index Generations, and Atomic Publication
 

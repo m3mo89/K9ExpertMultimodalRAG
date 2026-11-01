@@ -104,3 +104,15 @@ def test_heading_detection_and_page_aware_chunks_preserve_provenance() -> None:
     assert chunks[0].covered_pages == (7,)
     assert chunks[0].section_path == ("Cuidados",)
     assert chunks[0].content_hash != chunks[1].content_hash
+
+
+def test_encyclopedia_golden_pages_preserve_direct_text_ocr_selection_and_page_links() -> None:
+    source = Path("docs/references/enciclopedia-perros-caza.pdf")
+    pages = PdfExtractor().extract(source)
+    assert len(pages) == 243
+    assert "Enciclopedia de los perros de caza" in pages[0].text
+    assert OcrPolicy().decide(pages[1]).required is True
+    structured = HeadingDetector().structure([pages[9]])
+    chunks = PageAwareChunker(max_tokens=80, overlap_tokens=10).chunk(structured)
+    assert chunks
+    assert all(chunk.covered_pages == (10,) for chunk in chunks)
