@@ -75,19 +75,19 @@
 
 ## 8. Citations, Conversations, and Feedback APIs
 
-- [ ] 8.1 Implement answer and citation persistence with immutable bibliographic and permitted evidence snapshots
-- [ ] 8.2 Implement citation resolution that validates fragment, version, snapshot, page, and current source availability
-- [ ] 8.3 Implement secure page-level evidence delivery with range limits and no arbitrary filesystem access
-- [ ] 8.4 Implement conversation creation, ordered messages, bounded-history policy, and historical answer retrieval
-- [ ] 8.5 Implement useful/not-useful feedback with bounded comments and guarantee raw comments are excluded from generation prompts
-- [ ] 8.6 Implement REST endpoints for queries, conversations, citations, page evidence, and feedback using the common error envelope
-- [ ] 8.7 Add API integration tests for citation identity, withdrawn-source indicators, long conversations, invalid feedback, and current-versus-historical source state
+- [x] 8.1 Implement answer and citation persistence with immutable bibliographic and permitted evidence snapshots
+- [x] 8.2 Implement citation resolution that validates fragment, version, snapshot, page, and current source availability
+- [x] 8.3 Implement secure page-level evidence delivery with range limits and no arbitrary filesystem access
+- [x] 8.4 Implement conversation creation, ordered messages, bounded-history policy, and historical answer retrieval
+- [x] 8.5 Implement useful/not-useful feedback with bounded comments and guarantee raw comments are excluded from generation prompts
+- [x] 8.6 Implement REST endpoints for queries, conversations, citations, page evidence, and feedback using the common error envelope
+- [x] 8.7 Add API integration tests for citation identity, withdrawn-source indicators, long conversations, invalid feedback, and current-versus-historical source state
 
 ## 9. Administrative Lifecycle, Security, and Recovery
 
-- [ ] 9.1 Implement local administrative session or secret validation with secure configuration and audit events
-- [ ] 9.2 Implement short-lived destructive confirmation tokens bound to actor, resource, operation, and resource version
-- [ ] 9.3 Implement deactivate and reactivate use cases through validated snapshot publication and cache invalidation
+- [x] 9.1 Implement local administrative session or secret validation with secure configuration and audit events
+- [x] 9.2 Implement short-lived destructive confirmation tokens bound to actor, resource, operation, and resource version
+- [x] 9.3 Implement deactivate and reactivate use cases through validated snapshot publication and cache invalidation
 - [ ] 9.4 Implement confirmed logical deletion, historical citation preservation, retention policy, and scheduled physical cleanup
 - [ ] 9.5 Implement targeted document reindexing and explicitly requested complete reindexing with progress and failure states
 - [ ] 9.6 Implement health diagnostics for API, worker heartbeat, SQLite, storage, active snapshot, vector index, and local models without secret leakage

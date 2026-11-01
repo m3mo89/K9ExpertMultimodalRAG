@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from k9_expert.domain.models import DocumentStatus, JobStage
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -63,6 +65,8 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
   operation TEXT NOT NULL, resource_version TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
+  file_path TEXT NOT NULL, cleanup_after TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
 """
 
 
@@ -91,6 +95,17 @@ class SqliteDatabase:
             if current == 0:
                 connection.executescript(SCHEMA)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            elif current == 1:
+                connection.execute(
+                    """CREATE TABLE IF NOT EXISTS cleanup_queue (
+                    id TEXT PRIMARY KEY,
+                    document_id TEXT NOT NULL REFERENCES documents(id),
+                    file_path TEXT NOT NULL,
+                    cleanup_after TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL)"""
+                )
+                connection.execute("PRAGMA user_version = 2")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -261,6 +276,38 @@ class DocumentRepository:
                 "SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)
             ).fetchone()
         return None if result is None else cast(sqlite3.Row, result)
+
+    def resource_version(self, document_id: str) -> str:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT updated_at FROM documents WHERE id = ?", (document_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError("document_not_found")
+        return str(row["updated_at"])
+
+    def mark_deleted_and_schedule_cleanup(
+        self, document_id: str, cleanup_after: str
+    ) -> list[str]:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            updated = connection.execute(
+                "UPDATE documents SET status = ?, updated_at = ? WHERE id = ?",
+                (DocumentStatus.DELETED, timestamp, document_id),
+            )
+            if updated.rowcount != 1:
+                raise KeyError("document_not_found")
+            paths = [
+                str(row["file_path"])
+                for row in connection.execute(
+                    "SELECT file_path FROM document_versions WHERE document_id = ?", (document_id,)
+                )
+            ]
+            connection.executemany(
+                "INSERT INTO cleanup_queue VALUES (?, ?, ?, ?, 'scheduled', ?)",
+                [(str(uuid4()), document_id, path, cleanup_after, timestamp) for path in paths],
+            )
+        return paths
 
 
 class JobRepository:
@@ -446,6 +493,73 @@ class SnapshotRepository:
             )
             return [str(row["fragment_id"]) for row in rows]
 
+    def publish_document_membership(
+        self, snapshot_id: UUID, document_id: str, include: bool
+    ) -> tuple[str, str]:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            document = connection.execute(
+                "SELECT active_version_id, status FROM documents WHERE id = ?", (document_id,)
+            ).fetchone()
+            if document is None:
+                raise KeyError("document_not_found")
+            active = connection.execute(
+                """SELECT s.* FROM snapshots s JOIN system_state state
+                ON state.key = 'active_snapshot_id' AND state.value = s.id"""
+            ).fetchone()
+            if active is None:
+                raise ValueError("no_active_snapshot")
+            if include and document["active_version_id"] is None:
+                raise ValueError("document_has_no_active_version")
+            connection.execute(
+                "INSERT INTO snapshots VALUES (?, ?, ?, ?, 'candidate', ?, NULL)",
+                (
+                    str(snapshot_id),
+                    active["embedding_alias"],
+                    active["embedding_model"],
+                    active["embedding_dimensions"],
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                """INSERT INTO snapshot_membership (snapshot_id, fragment_id)
+                SELECT ?, membership.fragment_id FROM snapshot_membership membership
+                JOIN fragments fragment ON fragment.id = membership.fragment_id
+                JOIN document_versions version ON version.id = fragment.version_id
+                WHERE membership.snapshot_id = ? AND version.document_id != ?""",
+                (str(snapshot_id), active["id"], document_id),
+            )
+            if include:
+                connection.execute(
+                    """INSERT OR IGNORE INTO snapshot_membership (snapshot_id, fragment_id)
+                    SELECT ?, id FROM fragments WHERE version_id = ?""",
+                    (str(snapshot_id), document["active_version_id"]),
+                )
+            invalid = connection.execute(
+                """SELECT COUNT(*) AS count FROM snapshot_membership membership
+                LEFT JOIN fragments fragment ON fragment.id = membership.fragment_id
+                WHERE membership.snapshot_id = ? AND fragment.id IS NULL""",
+                (str(snapshot_id),),
+            ).fetchone()
+            if invalid is None or invalid["count"]:
+                raise ValueError("invalid_snapshot_membership")
+            connection.execute(
+                "UPDATE snapshots SET status = 'retained' WHERE id = ?", (active["id"],)
+            )
+            connection.execute(
+                "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ?",
+                (timestamp, str(snapshot_id)),
+            )
+            connection.execute(
+                "UPDATE documents SET status = ?, updated_at = ? WHERE id = ?",
+                (DocumentStatus.ACTIVE if include else DocumentStatus.DEACTIVATED, timestamp, document_id),
+            )
+            connection.execute(
+                "UPDATE system_state SET value = ? WHERE key = 'active_snapshot_id'",
+                (str(snapshot_id),),
+            )
+        return str(active["id"]), str(snapshot_id)
+
 
 class CacheInvalidator:
     def __init__(self) -> None:
@@ -453,6 +567,233 @@ class CacheInvalidator:
 
     def invalidate_snapshot(self, snapshot_id: str) -> None:
         self.invalidated_snapshots.append(snapshot_id)
+
+
+class InteractionRepository:
+    """Transactional persistence for immutable query, answer, citation and feedback records."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def create_conversation(self, conversation_id: UUID) -> sqlite3.Row:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO conversations (id, created_at, updated_at) VALUES (?, ?, ?)",
+                (str(conversation_id), timestamp, timestamp),
+            )
+            return cast(
+                sqlite3.Row,
+                connection.execute(
+                    "SELECT * FROM conversations WHERE id = ?", (str(conversation_id),)
+                ).fetchone(),
+            )
+
+    def conversation(self, conversation_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
+    def save_answer(
+        self,
+        *,
+        query_id: UUID,
+        answer_id: UUID,
+        conversation_id: str | None,
+        question_redacted: str,
+        snapshot_id: str,
+        status: str,
+        text: str,
+        citations: list[dict[str, object]],
+    ) -> None:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            if conversation_id is not None:
+                exists = connection.execute(
+                    "SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)
+                ).fetchone()
+                if exists is None:
+                    raise KeyError("conversation_not_found")
+            connection.execute(
+                "INSERT INTO queries VALUES (?, ?, ?, ?, ?, ?)",
+                (str(query_id), conversation_id, question_redacted, snapshot_id, status, timestamp),
+            )
+            connection.execute(
+                "INSERT INTO answers VALUES (?, ?, ?, ?, ?)",
+                (str(answer_id), str(query_id), text, status, timestamp),
+            )
+            for citation in citations:
+                connection.execute(
+                    """INSERT INTO citation_snapshots
+                    (id, answer_id, fragment_id, title, author, edition, physical_page,
+                     printed_page_label, excerpt, source_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(citation["id"]), str(answer_id), str(citation["fragment_id"]),
+                        citation["title"], citation.get("author"), citation.get("edition"),
+                        citation["physical_page"], citation.get("printed_page_label"),
+                        citation.get("excerpt"), citation["source_status"],
+                    ),
+                )
+            if conversation_id is not None:
+                connection.execute(
+                    "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                    (timestamp, conversation_id),
+                )
+
+    def conversation_history(self, conversation_id: str, limit: int = 20) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    """SELECT q.id AS query_id, q.question_redacted AS question,
+                    q.snapshot_id, q.status, q.created_at, a.id AS answer_id, a.text AS answer
+                    FROM queries q JOIN answers a ON a.query_id = q.id
+                    WHERE q.conversation_id = ? ORDER BY q.created_at DESC LIMIT ?""",
+                    (conversation_id, limit),
+                )
+            )[::-1]
+
+    def answer(self, answer_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """SELECT a.*, q.snapshot_id, q.conversation_id, q.question_redacted AS question
+                FROM answers a JOIN queries q ON q.id = a.query_id WHERE a.id = ?""",
+                (answer_id,),
+            ).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
+    def citations_for_answer(self, answer_id: str) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    "SELECT * FROM citation_snapshots WHERE answer_id = ? ORDER BY physical_page, id",
+                    (answer_id,),
+                )
+            )
+
+    def resolve_citation(self, citation_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """SELECT c.*, q.snapshot_id, f.version_id, f.page_start, f.page_end,
+                f.text AS current_excerpt, v.document_id, v.file_path, d.status AS current_source_status
+                FROM citation_snapshots c
+                JOIN answers a ON a.id = c.answer_id
+                JOIN queries q ON q.id = a.query_id
+                LEFT JOIN fragments f ON f.id = c.fragment_id
+                LEFT JOIN document_versions v ON v.id = f.version_id
+                LEFT JOIN documents d ON d.id = v.document_id
+                WHERE c.id = ?""",
+                (citation_id,),
+            ).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
+    def citation_is_in_snapshot(self, citation_id: str) -> bool:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """SELECT 1 FROM citation_snapshots c
+                JOIN answers a ON a.id = c.answer_id JOIN queries q ON q.id = a.query_id
+                JOIN snapshot_membership m ON m.snapshot_id = q.snapshot_id
+                  AND m.fragment_id = c.fragment_id WHERE c.id = ?""",
+                (citation_id,),
+            ).fetchone()
+        return row is not None
+
+    def page(self, citation_id: str, physical_page: int) -> sqlite3.Row | None:
+        citation = self.resolve_citation(citation_id)
+        if citation is None or citation["version_id"] is None:
+            return None
+        if physical_page < citation["page_start"] or physical_page > citation["page_end"]:
+            raise ValueError("page_outside_citation_range")
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT id, version_id, physical_page, printed_page_label, extracted_text, extraction_method FROM pages WHERE version_id = ? AND physical_page = ?",
+                (citation["version_id"], physical_page),
+            ).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
+    def add_feedback(
+        self, feedback_id: UUID, answer_id: str, useful: bool, comment: str | None
+    ) -> sqlite3.Row:
+        with self.database.transaction() as connection:
+            if connection.execute("SELECT 1 FROM answers WHERE id = ?", (answer_id,)).fetchone() is None:
+                raise KeyError("answer_not_found")
+            connection.execute(
+                "INSERT INTO feedback VALUES (?, ?, ?, ?, ?)",
+                (str(feedback_id), answer_id, int(useful), comment, now()),
+            )
+            return cast(
+                sqlite3.Row,
+                connection.execute("SELECT * FROM feedback WHERE id = ?", (str(feedback_id),)).fetchone(),
+            )
+
+
+class SecurityRepository:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def audit(
+        self,
+        event_id: UUID,
+        actor_id: str | None,
+        action: str,
+        resource_id: str | None = None,
+        attributes_json: str = "{}",
+    ) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO audit_events VALUES (?, ?, ?, ?, ?, ?)",
+                (str(event_id), actor_id, action, resource_id, attributes_json, now()),
+            )
+
+    def issue_confirmation(
+        self,
+        actor_id: str,
+        resource_id: str,
+        operation: str,
+        resource_version: str,
+        expires_at: str,
+    ) -> str:
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO confirmation_tokens VALUES (?, ?, ?, ?, ?, ?, NULL)",
+                (token_hash, actor_id, resource_id, operation, resource_version, expires_at),
+            )
+        return token
+
+    def consume_confirmation(
+        self,
+        token: str,
+        actor_id: str,
+        resource_id: str,
+        operation: str,
+        resource_version: str,
+        consumed_at: str,
+    ) -> bool:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        with self.database.transaction() as connection:
+            result = connection.execute(
+                """UPDATE confirmation_tokens SET consumed_at = ?
+                WHERE token_hash = ? AND actor_id = ? AND resource_id = ? AND operation = ?
+                AND resource_version = ? AND consumed_at IS NULL AND expires_at > ?""",
+                (
+                    consumed_at,
+                    token_hash,
+                    actor_id,
+                    resource_id,
+                    operation,
+                    resource_version,
+                    consumed_at,
+                ),
+            )
+        return result.rowcount == 1
+
+    def audit_events(self) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(connection.execute("SELECT * FROM audit_events ORDER BY created_at, id"))
 
 
 def reconciliation_report(database: SqliteDatabase, indexed_fragment_ids: set[str]) -> dict[str, list[str]]:

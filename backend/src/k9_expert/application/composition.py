@@ -6,9 +6,23 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from k9_expert.application.admin import AdminSecurityService
 from k9_expert.application.documents import DocumentRegistrationService, PdfValidator
+from k9_expert.application.generation import OllamaTextGateway
+from k9_expert.application.interactions import InteractionService
+from k9_expert.application.lifecycle import DocumentLifecycleService
+from k9_expert.application.query import QueryOrchestrator
+from k9_expert.application.query_service import QueryService
 from k9_expert.infrastructure.filesystem import ManagedFileStore
-from k9_expert.infrastructure.sqlite import DocumentRepository, JobRepository, SqliteDatabase
+from k9_expert.infrastructure.sqlite import (
+    CacheInvalidator,
+    DocumentRepository,
+    InteractionRepository,
+    JobRepository,
+    SecurityRepository,
+    SnapshotRepository,
+    SqliteDatabase,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +38,10 @@ class ApplicationSettings:
 class ApplicationContainer:
     settings: ApplicationSettings
     document_service: DocumentRegistrationService
+    interaction_service: InteractionService
+    query_service: QueryService
+    admin_security: AdminSecurityService
+    lifecycle_service: DocumentLifecycleService
 
 
 def compose(settings: ApplicationSettings | None = None) -> ApplicationContainer:
@@ -38,4 +56,25 @@ def compose(settings: ApplicationSettings | None = None) -> ApplicationContainer
         PdfValidator(max_pages=1000),
         max_file_bytes=100 * 1024 * 1024,
     )
-    return ApplicationContainer(settings=resolved, document_service=service)
+    documents = DocumentRepository(database)
+    interactions = InteractionRepository(database)
+    admin_security = AdminSecurityService(SecurityRepository(database), resolved.admin_secret)
+    lifecycle_service = DocumentLifecycleService(
+        SnapshotRepository(database),
+        CacheInvalidator(),
+        documents,
+        admin_security,
+    )
+    query_service = QueryService(
+        QueryOrchestrator(OllamaTextGateway().generate, lambda _request: []),
+        documents,
+        interactions,
+    )
+    return ApplicationContainer(
+        settings=resolved,
+        document_service=service,
+        interaction_service=InteractionService(interactions),
+        query_service=query_service,
+        admin_security=admin_security,
+        lifecycle_service=lifecycle_service,
+    )

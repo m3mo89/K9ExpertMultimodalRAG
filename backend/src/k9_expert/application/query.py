@@ -10,6 +10,7 @@ from k9_expert.application.generation import (
     verify_answer,
 )
 from k9_expert.domain.models import (
+    Citation,
     Evidence,
     QueryFilters,
     QueryId,
@@ -120,11 +121,18 @@ class QueryOrchestrator:
         system, prompt = PromptBuilder().build(request.text, evidence)
         draft: GeneratedAnswer = self.generate(system, prompt)
         status = verify_answer(draft, evidence, {str(item.fragment_id) for item in evidence})
+        cited_ids = set(draft.evidence_ids) if status == QueryStatus.GROUNDED else set()
+        citations = tuple(
+            Citation(item.fragment_id, item.source)
+            for item in evidence
+            if str(item.fragment_id) in cited_ids
+        )
         result = QueryResult(
             query_id,
             status,
             safety_frame(request.text, draft.answer),
             SnapshotId(UUID(snapshot_id)),
+            citations=citations,
             reason=None,
         )
         self.traces.append(status)
