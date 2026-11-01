@@ -8,6 +8,7 @@ import pytest
 from k9_expert.application.admin import AdminSecurityService
 from k9_expert.application.lifecycle import DocumentLifecycleService
 from k9_expert.infrastructure.sqlite import (
+    SCHEMA_VERSION,
     CacheInvalidator,
     DocumentRepository,
     SecurityRepository,
@@ -92,7 +93,7 @@ def test_schema_one_migrates_cleanup_queue(tmp_path) -> None:
         connection.execute("PRAGMA user_version = 1")
     database.migrate()
     with database.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE name = 'cleanup_queue'"
         ).fetchone() is not None

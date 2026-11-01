@@ -4,8 +4,12 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from k9_expert.application.query import QueryOrchestrator, QueryRequest
-from k9_expert.domain.models import QueryFilters, QueryResult
-from k9_expert.infrastructure.sqlite import DocumentRepository, InteractionRepository
+from k9_expert.domain.models import QueryFilters, QueryId, QueryResult, QueryStatus
+from k9_expert.infrastructure.sqlite import (
+    DocumentRepository,
+    InteractionRepository,
+    SystemStateRepository,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,12 +33,24 @@ class QueryService:
         orchestrator: QueryOrchestrator,
         documents: DocumentRepository,
         interactions: InteractionRepository,
+        state: SystemStateRepository | None = None,
     ) -> None:
         self.orchestrator = orchestrator
         self.documents = documents
         self.interactions = interactions
+        self.state = state
 
     def submit(self, command: SubmitQuery) -> StoredQueryResult:
+        disabled = self.state.queries_disabled_reason() if self.state else None
+        if disabled is not None:
+            unavailable = QueryResult(
+                query_id=QueryId(uuid4()),
+                status=QueryStatus.UNAVAILABLE,
+                answer="",
+                snapshot_id=None,
+                reason=disabled,
+            )
+            return StoredQueryResult(unavailable, None)
         snapshot_id = self.documents.active_snapshot_id()
         result = self.orchestrator.run(
             QueryRequest(text=command.text, filters=command.filters), snapshot_id

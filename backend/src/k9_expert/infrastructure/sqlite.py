@@ -12,7 +12,19 @@ from uuid import UUID, uuid4
 
 from k9_expert.domain.models import DocumentStatus, JobStage
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+CLEANUP_QUEUE_TABLE = """
+CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
+  file_path TEXT NOT NULL, cleanup_after TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
+"""
+
+REINDEX_TABLES = """
+CREATE TABLE IF NOT EXISTS reindex_requests (id TEXT PRIMARY KEY, scope TEXT NOT NULL, document_id TEXT,
+  actor_id TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reindex_jobs (request_id TEXT NOT NULL REFERENCES reindex_requests(id),
+  job_id TEXT NOT NULL REFERENCES ingestion_jobs(id), PRIMARY KEY(request_id, job_id));
+"""
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -65,9 +77,7 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
   operation TEXT NOT NULL, resource_version TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
-  file_path TEXT NOT NULL, cleanup_after TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
-"""
+""" + CLEANUP_QUEUE_TABLE + REINDEX_TABLES
 
 
 class UnsupportedSchemaError(RuntimeError):
@@ -95,17 +105,15 @@ class SqliteDatabase:
             if current == 0:
                 connection.executescript(SCHEMA)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-            elif current == 1:
-                connection.execute(
-                    """CREATE TABLE IF NOT EXISTS cleanup_queue (
-                    id TEXT PRIMARY KEY,
-                    document_id TEXT NOT NULL REFERENCES documents(id),
-                    file_path TEXT NOT NULL,
-                    cleanup_after TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL)"""
-                )
+                return
+            # Additive, ordered upgrades; each step leaves a valid schema version behind.
+            if current == 1:
+                connection.executescript(CLEANUP_QUEUE_TABLE)
                 connection.execute("PRAGMA user_version = 2")
+                current = 2
+            if current == 2:
+                connection.executescript(REINDEX_TABLES)
+                connection.execute("PRAGMA user_version = 3")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -287,7 +295,7 @@ class DocumentRepository:
         return str(row["updated_at"])
 
     def mark_deleted_and_schedule_cleanup(
-        self, document_id: str, cleanup_after: str
+        self, document_id: str, cleanup_after: str, retain_excerpts: bool = True
     ) -> list[str]:
         timestamp = now()
         with self.database.transaction() as connection:
@@ -307,7 +315,140 @@ class DocumentRepository:
                 "INSERT INTO cleanup_queue VALUES (?, ?, ?, ?, 'scheduled', ?)",
                 [(str(uuid4()), document_id, path, cleanup_after, timestamp) for path in paths],
             )
+            # Bibliographic identity and page always survive; the excerpt follows retention policy.
+            if not retain_excerpts:
+                connection.execute(
+                    """UPDATE citation_snapshots SET excerpt = NULL
+                    WHERE fragment_id IN (SELECT f.id FROM fragments f
+                      JOIN document_versions v ON v.id = f.version_id WHERE v.document_id = ?)""",
+                    (document_id,),
+                )
         return paths
+
+    def due_cleanups(self, as_of: str) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    "SELECT * FROM cleanup_queue WHERE status = 'scheduled' AND cleanup_after <= ? ORDER BY cleanup_after",
+                    (as_of,),
+                )
+            )
+
+    def file_referenced_by_live_document(self, file_path: str) -> bool:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.file_path = ? AND d.status != ?",
+                (file_path, DocumentStatus.DELETED),
+            ).fetchone()
+        return row is not None
+
+    def finish_cleanup(self, cleanup_id: str, status: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE cleanup_queue SET status = ? WHERE id = ? AND status = 'scheduled'",
+                (status, cleanup_id),
+            )
+
+    def reindex_version_ids(self, document_id: str | None) -> list[str]:
+        """Current version of one document, or of every non-deleted document."""
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT d.id, COALESCE(d.active_version_id, (SELECT v.id FROM document_versions v
+                  WHERE v.document_id = d.id ORDER BY v.created_at DESC LIMIT 1)) AS version_id
+                FROM documents d WHERE d.status != ? AND (? IS NULL OR d.id = ?)
+                ORDER BY d.created_at""",
+                (DocumentStatus.DELETED, document_id, document_id),
+            ).fetchall()
+            if document_id is not None and not rows:
+                exists = connection.execute(
+                    "SELECT 1 FROM documents WHERE id = ?", (document_id,)
+                ).fetchone()
+                raise KeyError("document_not_found" if exists is None else "document_deleted")
+        return [str(row["version_id"]) for row in rows if row["version_id"] is not None]
+
+    def create_reindex_request(
+        self,
+        request_id: UUID,
+        scope: str,
+        document_id: str | None,
+        actor_id: str,
+        version_ids: list[str],
+    ) -> list[str]:
+        timestamp = now()
+        job_ids: list[str] = []
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO reindex_requests VALUES (?, ?, ?, ?, ?)",
+                (str(request_id), scope, document_id, actor_id, timestamp),
+            )
+            for version_id in version_ids:
+                # Reuse an in-flight job instead of racing two jobs over the same version.
+                pending = connection.execute(
+                    "SELECT id FROM ingestion_jobs WHERE version_id = ? AND stage NOT IN (?, ?) ORDER BY created_at DESC LIMIT 1",
+                    (version_id, JobStage.AVAILABLE, JobStage.ERROR),
+                ).fetchone()
+                job_id = str(pending["id"]) if pending is not None else str(uuid4())
+                if pending is None:
+                    connection.execute(
+                        "INSERT INTO ingestion_jobs (id, version_id, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                        (job_id, version_id, JobStage.RECEIVED, timestamp, timestamp),
+                    )
+                connection.execute(
+                    "INSERT INTO reindex_jobs VALUES (?, ?)", (str(request_id), job_id)
+                )
+                job_ids.append(job_id)
+        return job_ids
+
+    def reindex_request(self, request_id: str) -> tuple[sqlite3.Row, list[sqlite3.Row]] | None:
+        with self.database.connect() as connection:
+            request = connection.execute(
+                "SELECT * FROM reindex_requests WHERE id = ?", (request_id,)
+            ).fetchone()
+            if request is None:
+                return None
+            jobs = connection.execute(
+                """SELECT j.id, j.version_id, j.stage, j.attempt, j.error_code FROM reindex_jobs r
+                JOIN ingestion_jobs j ON j.id = r.job_id WHERE r.request_id = ? ORDER BY j.created_at""",
+                (request_id,),
+            ).fetchall()
+        return cast(sqlite3.Row, request), list(jobs)
+
+
+class SystemStateRepository:
+    """Process-independent operational flags such as worker heartbeat and query gating."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def get(self, key: str) -> str | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM system_state WHERE key = ?", (key,)
+            ).fetchone()
+        return None if row is None else str(row["value"])
+
+    def set(self, key: str, value: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def delete(self, key: str) -> None:
+        with self.database.transaction() as connection:
+            connection.execute("DELETE FROM system_state WHERE key = ?", (key,))
+
+    def record_worker_heartbeat(self) -> None:
+        self.set("worker_heartbeat", now())
+
+    def queries_disabled_reason(self) -> str | None:
+        return self.get("queries_disabled_reason")
+
+    def disable_queries(self, reason: str) -> None:
+        self.set("queries_disabled_reason", reason)
+
+    def enable_queries(self) -> None:
+        self.delete("queries_disabled_reason")
 
 
 class JobRepository:
@@ -396,8 +537,12 @@ class ContentRepository:
             )
 
     def clear_version_content(self, version_id: str) -> None:
+        # Fragments referenced by a published or retained snapshot are immutable evidence.
         with self.database.transaction() as connection:
-            connection.execute("DELETE FROM fragments WHERE version_id = ?", (version_id,))
+            connection.execute(
+                "DELETE FROM fragments WHERE version_id = ? AND id NOT IN (SELECT fragment_id FROM snapshot_membership)",
+                (version_id,),
+            )
             connection.execute("DELETE FROM pages WHERE version_id = ?", (version_id,))
 
     def add_fragment(
@@ -415,7 +560,7 @@ class ContentRepository:
     ) -> None:
         with self.database.transaction() as connection:
             connection.execute(
-                "INSERT INTO fragments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO fragments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(version_id, content_hash) DO NOTHING",
                 (
                     str(fragment_id),
                     str(version_id),
@@ -479,6 +624,14 @@ class SnapshotRepository:
             ).fetchone()
             if candidate is None:
                 raise ValueError("snapshot_not_retained")
+            deleted = connection.execute(
+                """SELECT 1 FROM snapshot_membership m JOIN fragments f ON f.id = m.fragment_id
+                JOIN document_versions v ON v.id = f.version_id JOIN documents d ON d.id = v.document_id
+                WHERE m.snapshot_id = ? AND d.status = ? LIMIT 1""",
+                (str(snapshot_id), DocumentStatus.DELETED),
+            ).fetchone()
+            if deleted is not None:
+                raise ValueError("snapshot_contains_deleted_source")
             connection.execute("UPDATE snapshots SET status = 'retained' WHERE status = 'active'")
             connection.execute("UPDATE snapshots SET status = 'active' WHERE id = ?", (str(snapshot_id),))
             connection.execute(
@@ -492,6 +645,26 @@ class SnapshotRepository:
                 "SELECT fragment_id FROM snapshot_membership WHERE snapshot_id = (SELECT value FROM system_state WHERE key = 'active_snapshot_id')"
             )
             return [str(row["fragment_id"]) for row in rows]
+
+    def snapshot(self, snapshot_id: str) -> sqlite3.Row | None:
+        with self.database.connect() as connection:
+            row = connection.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,)).fetchone()
+        return None if row is None else cast(sqlite3.Row, row)
+
+    def index_fragments(self, snapshot_id: str) -> list[sqlite3.Row]:
+        """Everything needed to rebuild a snapshot's vector generation from authoritative data."""
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    """SELECT f.id, f.text, f.version_id, f.page_start, f.section_path,
+                    v.document_id, v.file_path, d.category FROM snapshot_membership m
+                    JOIN fragments f ON f.id = m.fragment_id
+                    JOIN document_versions v ON v.id = f.version_id
+                    JOIN documents d ON d.id = v.document_id
+                    WHERE m.snapshot_id = ? ORDER BY f.version_id, f.ordinal""",
+                    (snapshot_id,),
+                )
+            )
 
     def publish_document_membership(
         self, snapshot_id: UUID, document_id: str, include: bool

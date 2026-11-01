@@ -88,12 +88,12 @@
 - [x] 9.1 Implement local administrative session or secret validation with secure configuration and audit events
 - [x] 9.2 Implement short-lived destructive confirmation tokens bound to actor, resource, operation, and resource version
 - [x] 9.3 Implement deactivate and reactivate use cases through validated snapshot publication and cache invalidation
-- [ ] 9.4 Implement confirmed logical deletion, historical citation preservation, retention policy, and scheduled physical cleanup
-- [ ] 9.5 Implement targeted document reindexing and explicitly requested complete reindexing with progress and failure states
-- [ ] 9.6 Implement health diagnostics for API, worker heartbeat, SQLite, storage, active snapshot, vector index, and local models without secret leakage
-- [ ] 9.7 Implement consistent backup of SQLite, source files, configuration manifest, and optional derived indexes
-- [ ] 9.8 Implement restore validation, hash checking, reconciliation, and derived-index rebuild before queries are enabled
-- [ ] 9.9 Add security and integration tests for unauthorized mutations, stale confirmations, path traversal, cleanup retention, backup, and restore
+- [x] 9.4 Implement confirmed logical deletion, historical citation preservation, retention policy, and scheduled physical cleanup
+- [x] 9.5 Implement targeted document reindexing and explicitly requested complete reindexing with progress and failure states
+- [x] 9.6 Implement health diagnostics for API, worker heartbeat, SQLite, storage, active snapshot, vector index, and local models without secret leakage
+- [x] 9.7 Implement consistent backup of SQLite, source files, configuration manifest, and optional derived indexes
+- [x] 9.8 Implement restore validation, hash checking, reconciliation, and derived-index rebuild before queries are enabled
+- [x] 9.9 Add security and integration tests for unauthorized mutations, stale confirmations, path traversal, cleanup retention, backup, and restore
 
 ## 10. Responsive Web Application
 

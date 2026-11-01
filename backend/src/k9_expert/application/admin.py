@@ -29,6 +29,9 @@ class AdminSecurityService:
         )
         return valid
 
+    def record(self, actor_id: str, action: str, resource_id: str | None = None) -> None:
+        self.repository.audit(uuid4(), actor_id, action, resource_id)
+
     def issue_confirmation(
         self, actor_id: str, resource_id: str, operation: str, resource_version: str
     ) -> tuple[str, str]:

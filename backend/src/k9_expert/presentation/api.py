@@ -26,6 +26,7 @@ from k9_expert.application.documents import (
     UploadValidationError,
 )
 from k9_expert.application.query_service import SubmitQuery
+from k9_expert.application.recovery import BackupError
 from k9_expert.domain.models import DocumentId, QueryFilters
 
 
@@ -140,6 +141,18 @@ class DeleteDocumentRequest(BaseModel):
     resource_version: str = Field(min_length=1)
 
 
+class CompleteReindexRequest(BaseModel):
+    explicitly_requested: bool = False
+
+
+class BackupRequest(BaseModel):
+    include_indexes: bool = False
+
+
+class RestoreRequest(BaseModel):
+    confirmation_token: str = Field(min_length=1)
+
+
 def error_response(status_code: int, code: str, details: object | None = None) -> JSONResponse:
     payload = ErrorEnvelope(
         code=code,
@@ -190,9 +203,7 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     )
     def create_confirmation(
         request: ConfirmationRequest,
-        x_k9_actor: Annotated[
-            str, Header(min_length=1, max_length=100)
-        ] = "local-admin",
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
     ) -> ConfirmationResponse:
         token, expires_at = resolved.admin_security.issue_confirmation(
             x_k9_actor, request.resource_id, request.operation, request.resource_version
@@ -239,9 +250,7 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     def delete_document(
         document_id: str,
         request: DeleteDocumentRequest,
-        x_k9_actor: Annotated[
-            str, Header(min_length=1, max_length=100)
-        ] = "local-admin",
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
     ) -> PublicationResponse:
         try:
             snapshot_id = resolved.lifecycle_service.delete(
@@ -254,9 +263,100 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(error.args[0])) from error
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+        resolved.admin_security.record(x_k9_actor, "document_deleted", document_id)
         return PublicationResponse(
             document_id=document_id, snapshot_id=snapshot_id, status="deleted"
         )
+
+    @app.post("/api/v1/admin/cleanup", dependencies=[Depends(require_admin)])
+    def run_cleanup(
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, object]:
+        report = resolved.lifecycle_service.run_due_cleanup()
+        resolved.admin_security.record(x_k9_actor, "cleanup_run")
+        return {
+            "removed": len(report.removed),
+            "already_absent": len(report.already_absent),
+            "kept_shared": len(report.kept_shared),
+            "refused": len(report.refused),
+        }
+
+    @app.post(
+        "/api/v1/documents/{document_id}/reindex",
+        status_code=202,
+        dependencies=[Depends(require_admin)],
+    )
+    def reindex_document(
+        document_id: str,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, object]:
+        try:
+            progress = resolved.reindex_service.reindex_document(document_id, x_k9_actor)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        resolved.admin_security.record(x_k9_actor, "reindex_requested", document_id)
+        return progress
+
+    @app.post("/api/v1/admin/reindex", status_code=202, dependencies=[Depends(require_admin)])
+    def reindex_all(
+        request: CompleteReindexRequest,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, object]:
+        try:
+            progress = resolved.reindex_service.reindex_all(
+                x_k9_actor, request.explicitly_requested
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        resolved.admin_security.record(x_k9_actor, "complete_reindex_requested")
+        return progress
+
+    @app.get("/api/v1/admin/reindex/{request_id}", dependencies=[Depends(require_admin)])
+    def reindex_progress(request_id: str) -> dict[str, object]:
+        try:
+            return resolved.reindex_service.progress(request_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+
+    @app.get("/api/v1/admin/health", dependencies=[Depends(require_admin)])
+    def diagnostics() -> dict[str, object]:
+        return resolved.health_service.report()
+
+    @app.get("/api/v1/admin/backups", dependencies=[Depends(require_admin)])
+    def list_backups() -> list[dict[str, object]]:
+        return resolved.backup_service.list()
+
+    @app.post("/api/v1/admin/backups", status_code=201, dependencies=[Depends(require_admin)])
+    def create_backup(
+        request: BackupRequest,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, object]:
+        manifest = resolved.backup_service.create(request.include_indexes)
+        resolved.admin_security.record(x_k9_actor, "backup_created", str(manifest["backup_id"]))
+        return {key: value for key, value in manifest.items() if key != "entries"}
+
+    @app.post("/api/v1/admin/backups/{backup_id}/restore", dependencies=[Depends(require_admin)])
+    def restore_backup(
+        backup_id: str,
+        request: RestoreRequest,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, object]:
+        try:
+            resource_version = resolved.restore_service.resource_version(backup_id)
+            if not resolved.admin_security.consume_confirmation(
+                request.confirmation_token, x_k9_actor, backup_id, "restore", resource_version
+            ):
+                raise HTTPException(status_code=409, detail="invalid_confirmation")
+            report = resolved.restore_service.restore(backup_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except BackupError as error:
+            raise HTTPException(status_code=422, detail=error.code) from error
+        # The audit trail lives in the restored database, so record after the swap.
+        resolved.admin_security.record(x_k9_actor, "backup_restored", backup_id)
+        return report
 
     @app.post("/api/v1/queries", response_model=QueryResponse)
     def submit_query(request: QueryRequestBody) -> QueryResponse:

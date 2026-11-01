@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from k9_expert.application.admin import AdminSecurityService
+from k9_expert.infrastructure.filesystem import ManagedFileStore
 from k9_expert.infrastructure.sqlite import (
     CacheInvalidator,
     DocumentRepository,
     SnapshotRepository,
 )
+
+
+@dataclass(slots=True)
+class CleanupReport:
+    removed: list[str] = field(default_factory=list)
+    already_absent: list[str] = field(default_factory=list)
+    kept_shared: list[str] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
 
 
 class DocumentLifecycleService:
@@ -19,12 +30,16 @@ class DocumentLifecycleService:
         documents: DocumentRepository | None = None,
         security: AdminSecurityService | None = None,
         retention_days: int = 30,
+        file_store: ManagedFileStore | None = None,
+        retain_deleted_excerpts: bool = True,
     ) -> None:
         self.snapshots = snapshots
         self.cache = cache
         self.documents = documents
         self.security = security
         self.retention_days = retention_days
+        self.file_store = file_store
+        self.retain_deleted_excerpts = retain_deleted_excerpts
 
     def deactivate(self, document_id: str) -> str:
         previous, published = self.snapshots.publish_document_membership(
@@ -55,6 +70,28 @@ class DocumentLifecycleService:
         published = self.deactivate(document_id)
         cleanup_after = datetime.now(UTC) + timedelta(days=self.retention_days)
         self.documents.mark_deleted_and_schedule_cleanup(
-            document_id, cleanup_after.isoformat()
+            document_id, cleanup_after.isoformat(), self.retain_deleted_excerpts
         )
         return published
+
+    def run_due_cleanup(self, as_of: datetime | None = None) -> CleanupReport:
+        """Physically remove source files of deleted documents whose retention has elapsed."""
+        if self.documents is None or self.file_store is None:
+            raise RuntimeError("cleanup_not_configured")
+        report = CleanupReport()
+        for entry in self.documents.due_cleanups((as_of or datetime.now(UTC)).isoformat()):
+            cleanup_id, file_path = str(entry["id"]), str(entry["file_path"])
+            # Storage is content-addressed, so another live document may share the file.
+            if self.documents.file_referenced_by_live_document(file_path):
+                self.documents.finish_cleanup(cleanup_id, "kept_shared")
+                report.kept_shared.append(cleanup_id)
+                continue
+            try:
+                removed = self.file_store.remove_document_file(Path(file_path))
+            except ValueError:
+                self.documents.finish_cleanup(cleanup_id, "refused")
+                report.refused.append(cleanup_id)
+                continue
+            self.documents.finish_cleanup(cleanup_id, "completed")
+            (report.removed if removed else report.already_absent).append(cleanup_id)
+        return report

@@ -72,6 +72,16 @@ class ManagedFileStore:
                 count += 1
         return count
 
+    def remove_document_file(self, path: Path) -> bool:
+        """Delete a promoted source file; refuses anything outside the managed documents root."""
+        resolved = path.resolve()
+        if self.documents_root.resolve() not in resolved.parents:
+            raise ValueError("path_outside_managed_storage")
+        if not resolved.is_file():
+            return False
+        resolved.unlink()
+        return True
+
     def put(self, source: Path, content_hash: str) -> Path:
         with source.resolve(strict=True).open("rb") as handle:
             return self.promote(self.stage(handle, source.stat().st_size))

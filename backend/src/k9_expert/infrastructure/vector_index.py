@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
+from chromadb.api.shared_system_client import SharedSystemClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +56,14 @@ class ChromaGenerationIndex:
             name=f"generation_{generation_id.replace('-', '_')}", embedding_function=None
         )
 
+    def reset(self) -> None:
+        name = self.collection.name
+        self.client.delete_collection(name)
+        self.collection = self.client.get_or_create_collection(name=name, embedding_function=None)
+
+    def fragment_ids(self) -> set[str]:
+        return {str(fragment_id) for fragment_id in self.collection.get(include=[])["ids"]}
+
     def add(self, records: Sequence[VectorRecord]) -> None:
         if not records:
             return
@@ -103,6 +112,11 @@ class ChromaGenerationIndex:
                 ids, documents, embeddings, metadata, strict=True
             )
         ]
+
+
+def release_index_clients() -> None:
+    """Drop cached Chroma clients so a replaced index directory is reopened from disk."""
+    SharedSystemClient.clear_system_cache()
 
 
 def requires_full_reindex(previous: IndexConfiguration, candidate: IndexConfiguration) -> bool:
