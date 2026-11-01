@@ -382,3 +382,90 @@ class ContentRepository:
                     chunking_version,
                 ),
             )
+
+
+class SnapshotRepository:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def create(self, snapshot_id: UUID, alias: str, model: str, dimensions: int) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, NULL)",
+                (str(snapshot_id), alias, model, dimensions, "candidate", now()),
+            )
+
+    def activate(self, snapshot_id: UUID, version_id: UUID, fragment_ids: list[UUID]) -> None:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            current = connection.execute(
+                "SELECT value FROM system_state WHERE key = 'active_snapshot_id'"
+            ).fetchone()
+            if current is not None:
+                connection.execute("UPDATE snapshots SET status = 'retained' WHERE id = ?", (current["value"],))
+            activated = connection.execute(
+                "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ? AND status = 'candidate'",
+                (timestamp, str(snapshot_id)),
+            )
+            if activated.rowcount != 1:
+                raise ValueError("snapshot_not_candidate")
+            connection.executemany(
+                "INSERT INTO snapshot_membership (snapshot_id, fragment_id) VALUES (?, ?)",
+                [(str(snapshot_id), str(fragment_id)) for fragment_id in fragment_ids],
+            )
+            connection.execute(
+                "UPDATE document_versions SET status = 'active' WHERE id = ?", (str(version_id),)
+            )
+            connection.execute(
+                "UPDATE documents SET active_version_id = ?, status = 'active', updated_at = ? WHERE id = (SELECT document_id FROM document_versions WHERE id = ?)",
+                (str(version_id), timestamp, str(version_id)),
+            )
+            connection.execute(
+                "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(snapshot_id),),
+            )
+
+    def rollback(self, snapshot_id: UUID) -> None:
+        with self.database.transaction() as connection:
+            candidate = connection.execute(
+                "SELECT id FROM snapshots WHERE id = ? AND status IN ('retained', 'active')", (str(snapshot_id),)
+            ).fetchone()
+            if candidate is None:
+                raise ValueError("snapshot_not_retained")
+            connection.execute("UPDATE snapshots SET status = 'retained' WHERE status = 'active'")
+            connection.execute("UPDATE snapshots SET status = 'active' WHERE id = ?", (str(snapshot_id),))
+            connection.execute(
+                "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(snapshot_id),),
+            )
+
+    def active_membership(self) -> list[str]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT fragment_id FROM snapshot_membership WHERE snapshot_id = (SELECT value FROM system_state WHERE key = 'active_snapshot_id')"
+            )
+            return [str(row["fragment_id"]) for row in rows]
+
+
+class CacheInvalidator:
+    def __init__(self) -> None:
+        self.invalidated_snapshots: list[str] = []
+
+    def invalidate_snapshot(self, snapshot_id: str) -> None:
+        self.invalidated_snapshots.append(snapshot_id)
+
+
+def reconciliation_report(database: SqliteDatabase, indexed_fragment_ids: set[str]) -> dict[str, list[str]]:
+    with database.connect() as connection:
+        files = connection.execute("SELECT id, file_path FROM document_versions").fetchall()
+        fragments = connection.execute("SELECT id FROM fragments").fetchall()
+        membership = connection.execute(
+            "SELECT m.fragment_id FROM snapshot_membership m LEFT JOIN fragments f ON f.id = m.fragment_id WHERE f.id IS NULL"
+        ).fetchall()
+    stored_fragments = {str(row["id"]) for row in fragments}
+    return {
+        "missing_files": [str(row["id"]) for row in files if not Path(row["file_path"]).is_file()],
+        "missing_vectors": sorted(stored_fragments - indexed_fragment_ids),
+        "orphan_vectors": sorted(indexed_fragment_ids - stored_fragments),
+        "invalid_membership": [str(row["fragment_id"]) for row in membership],
+    }

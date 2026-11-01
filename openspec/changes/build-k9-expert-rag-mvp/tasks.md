@@ -49,16 +49,16 @@
 
 ## 6. Embeddings, Index Generations, and Atomic Publication
 
-- [ ] 6.1 Implement the embedding gateway alias, local adapter, batching, normalization, dimensions, timeouts, telemetry, and deterministic test double
-- [ ] 6.2 Implement content-addressed embedding cache reuse for unchanged fragments under compatible model configuration
-- [ ] 6.3 Implement vector index generations and metadata mapping for snapshot, document, version, page, category, breed, and section filters
-- [ ] 6.4 Implement incremental index assembly that embeds only changed fragments and reuses unchanged document membership
-- [ ] 6.5 Implement full-reindex detection for incompatible embedding, dimensionality, normalization, or chunking changes
-- [ ] 6.6 Implement pre-publication validation for counts, dimensions, relational references, file resolution, membership, and retrieval smoke tests
-- [ ] 6.7 Implement the SQLite transaction that atomically activates a document version and snapshot while retaining the previous valid snapshot
-- [ ] 6.8 Implement post-publication cache invalidation and verify a failed build or commit leaves the previous snapshot active
-- [ ] 6.9 Implement snapshot rollback and tests proving queries never mix old and new snapshot membership
-- [ ] 6.10 Implement a read-only reconciliation report for missing, orphaned, or inconsistent files, fragments, membership, and vectors
+- [x] 6.1 Implement the embedding gateway alias, local adapter, batching, normalization, dimensions, timeouts, telemetry, and deterministic test double
+- [x] 6.2 Implement content-addressed embedding cache reuse for unchanged fragments under compatible model configuration
+- [x] 6.3 Implement vector index generations and metadata mapping for snapshot, document, version, page, category, breed, and section filters
+- [x] 6.4 Implement incremental index assembly that embeds only changed fragments and reuses unchanged document membership
+- [x] 6.5 Implement full-reindex detection for incompatible embedding, dimensionality, normalization, or chunking changes
+- [x] 6.6 Implement pre-publication validation for counts, dimensions, relational references, file resolution, membership, and retrieval smoke tests
+- [x] 6.7 Implement the SQLite transaction that atomically activates a document version and snapshot while retaining the previous valid snapshot
+- [x] 6.8 Implement post-publication cache invalidation and verify a failed build or commit leaves the previous snapshot active
+- [x] 6.9 Implement snapshot rollback and tests proving queries never mix old and new snapshot membership
+- [x] 6.10 Implement a read-only reconciliation report for missing, orphaned, or inconsistent files, fragments, membership, and vectors
 
 ## 7. Grounded Query Pipeline
 
