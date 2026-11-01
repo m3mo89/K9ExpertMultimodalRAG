@@ -62,16 +62,16 @@
 
 ## 7. Grounded Query Pipeline
 
-- [ ] 7.1 Implement query DTOs, bounded input validation, filter validation, input policy results, and snapshot binding
-- [ ] 7.2 Implement a basic in-domain router using logical model aliases and explicit early-exit result states
-- [ ] 7.3 Implement the semantic Retriever port and adapter with configurable top-k, threshold, diversity, context budget, and strict metadata filters
-- [ ] 7.4 Implement evidence sufficiency policy and tests for empty, weak, filtered-out, and adequate evidence
-- [ ] 7.5 Implement versioned prompt construction that clearly delimits untrusted documentary evidence and bounded conversation context
-- [ ] 7.6 Implement the Ollama text gateway with structured responses, resolved model version, timeout, availability, retry limits, and no external fallback
-- [ ] 7.7 Implement deterministic output verification for evidence IDs, snapshot membership, claim citations, and typed abstention or non-verified states
-- [ ] 7.8 Implement explicit handling of conflicting source positions and documentary safety framing for health, nutrition, hygiene, and training content
-- [ ] 7.9 Implement the query orchestrator with ordered barriers, cache shortcut, retrieval, generation, verification, persistence, and stage tracing
-- [ ] 7.10 Add unit tests with fake models for rejection, cache hit, unsupported query, filtered query, grounded answer, invalid citation, conflict, timeout, and abstention
+- [x] 7.1 Implement query DTOs, bounded input validation, filter validation, input policy results, and snapshot binding
+- [x] 7.2 Implement a basic in-domain router using logical model aliases and explicit early-exit result states
+- [x] 7.3 Implement the semantic Retriever port and adapter with configurable top-k, threshold, diversity, context budget, and strict metadata filters
+- [x] 7.4 Implement evidence sufficiency policy and tests for empty, weak, filtered-out, and adequate evidence
+- [x] 7.5 Implement versioned prompt construction that clearly delimits untrusted documentary evidence and bounded conversation context
+- [x] 7.6 Implement the Ollama text gateway with structured responses, resolved model version, timeout, availability, retry limits, and no external fallback
+- [x] 7.7 Implement deterministic output verification for evidence IDs, snapshot membership, claim citations, and typed abstention or non-verified states
+- [x] 7.8 Implement explicit handling of conflicting source positions and documentary safety framing for health, nutrition, hygiene, and training content
+- [x] 7.9 Implement the query orchestrator with ordered barriers, cache shortcut, retrieval, generation, verification, persistence, and stage tracing
+- [x] 7.10 Add unit tests with fake models for rejection, cache hit, unsupported query, filtered query, grounded answer, invalid citation, conflict, timeout, and abstention
 
 ## 8. Citations, Conversations, and Feedback APIs
 
