@@ -139,4 +139,11 @@ describe('ChatView', () => {
     expect(screen.getByText('Se conserva la cita tal como se produjo.')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /¿Origen del beagle\?/ })).toHaveAttribute('aria-current', 'true'))
   })
+
+  it('flags a verified discrepancy between sources', async () => {
+    const api = setup(grounded({ discrepancy: true }))
+    renderWithApi(<ChatView />, api.client)
+    await ask('¿Altura del teckel?')
+    expect(await screen.findByRole('note')).toHaveTextContent('discrepan')
+  })
 })

@@ -98,6 +98,8 @@ class QueryResult:
     citations: tuple[Citation, ...] = ()
     trace_id: str | None = None
     reason: str | None = None
+    # Cited evidence from different documents holds incompatible positions.
+    discrepancy: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,4 +107,5 @@ class TraceEvent:
     trace_id: str
     event: str
     occurred_at: datetime
-    attributes: dict[str, str | int | float | bool | None]
+    # JSON-serializable; telemetry sinks must store only redacted attributes.
+    attributes: dict[str, object]

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx
 
+from k9_expert.application.observability import TelemetryService
 from k9_expert.domain.models import JobStage
 from k9_expert.infrastructure.sqlite import (
     SCHEMA_VERSION,
@@ -26,14 +27,27 @@ ComponentState = Literal["ok", "degraded", "unavailable"]
 
 
 class OperationalMetricsService:
-    def __init__(self, database: SqliteDatabase) -> None:
+    def __init__(
+        self,
+        database: SqliteDatabase,
+        telemetry: TelemetryService | None = None,
+        model_probe: Callable[[], ComponentHealth] | None = None,
+    ) -> None:
         self.database = database
+        self.telemetry = telemetry
+        self.model_probe = model_probe
 
     def report(self) -> dict[str, object]:
-        return {
+        report: dict[str, object] = {
             "generated_at": datetime.now(UTC).isoformat(),
             **operational_counts(self.database),
         }
+        if self.telemetry is not None:
+            report["recent"] = self.telemetry.aggregates()
+        if self.model_probe is not None:
+            model = self.model_probe()
+            report["model_availability"] = {"status": model.status, "detail": model.detail}
+        return report
 
 
 class ReindexService:

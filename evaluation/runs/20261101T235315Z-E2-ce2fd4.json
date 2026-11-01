@@ -1,0 +1,513 @@
+{
+  "manifest": {
+    "run_id": "20261101T235315Z-E2-ce2fd4",
+    "experiment": "E2",
+    "started_at": "2026-11-01T23:53:15.028762+00:00",
+    "finished_at": "2026-11-01T23:53:59.459627+00:00",
+    "dataset": {
+      "id": "k9-reference",
+      "version": "1.0.0",
+      "sha256": "4ac5077f20b6499a8a88aa0d9cabe9b3ba946a58cade5703a2896c8484b80cee"
+    },
+    "prompt_version": "grounded-v4",
+    "models": {
+      "text_alias": "text-default",
+      "text_model": "llama3.2:3b",
+      "embedding_alias": "embedding-default",
+      "embedding_model": "nomic-embed-text:latest",
+      "text_resolved_model": "llama3.2:3b"
+    },
+    "retrieval": {
+      "embedding_alias": "embedding-default",
+      "embedding_model": "nomic-embed-text:latest",
+      "candidates": 24,
+      "top_k": 6,
+      "minimum_score": 0.0,
+      "context_tokens": 2500,
+      "max_per_section": 2
+    },
+    "corpus": {
+      "snapshot_id": "acbd3685-79db-4f71-870b-3f45290f024b",
+      "fragment_count": 934,
+      "documents": [
+        {
+          "id": "e79986db-50a8-47e6-945d-0f78dd4afe43",
+          "title": "Enciclopedia de los perros de caza",
+          "active_version_id": "144519b5-558d-4946-a1d6-952daa5760ee"
+        },
+        {
+          "id": "0393df0b-d572-4aa0-8ef4-83dbcbaf89ab",
+          "title": "Capas de un producto de IA",
+          "active_version_id": "a4e6a497-6ce6-48fd-9385-d2fdf7ac7b4a"
+        }
+      ]
+    },
+    "code": {
+      "git_commit": "c5b352c43bc24a6c15a561a31f28601aaee53051",
+      "git_dirty": true
+    },
+    "configuration": {
+      "path": "config/k9.defaults.toml",
+      "sha256": "1e1c4fcfa1e8a0ebf31d368b8ecc3e689ce7959e62a888457cfacd1174f74864"
+    },
+    "environment": {
+      "python": "3.13.13",
+      "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+      "machine": "arm64",
+      "processor": "arm",
+      "memory_bytes": 19327352832
+    }
+  },
+  "aggregate": {
+    "cases": 10,
+    "recall_at_k": {
+      "1": 0.5625,
+      "3": 0.8125,
+      "5": 0.8125,
+      "8": 0.8125
+    },
+    "mrr": 0.7916666666666666,
+    "citation_precision": 0.6125,
+    "grounded_cases_with_citations": 8,
+    "abstention_accuracy": 1.0,
+    "correct_abstention_rate": 1.0,
+    "false_abstention_rate": 0.0,
+    "latency_ms": {
+      "mean": 4442.889099999999,
+      "p50": 5029.96,
+      "p95": 8963.701,
+      "max": 8963.701
+    }
+  },
+  "by_class": {
+    "comparison": {
+      "cases": 2,
+      "recall_at_k": {
+        "1": 0.25,
+        "3": 0.75,
+        "5": 0.75,
+        "8": 0.75
+      },
+      "mrr": 0.6666666666666666,
+      "citation_precision": 0.2,
+      "grounded_cases_with_citations": 2,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.0,
+      "latency_ms": {
+        "mean": 5753.518,
+        "p50": 5141.368,
+        "p95": 6365.668,
+        "max": 6365.668
+      }
+    },
+    "explicit": {
+      "cases": 4,
+      "recall_at_k": {
+        "1": 0.75,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "mrr": 1.0,
+      "citation_precision": 0.875,
+      "grounded_cases_with_citations": 4,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.0,
+      "latency_ms": {
+        "mean": 6434.32725,
+        "p50": 5120.628,
+        "p95": 8963.701,
+        "max": 8963.701
+      }
+    },
+    "filtered": {
+      "cases": 1,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 34.103,
+        "p50": 34.103,
+        "p95": 34.103,
+        "max": 34.103
+      }
+    },
+    "safety": {
+      "cases": 2,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5,
+        "8": 0.5
+      },
+      "mrr": 0.5,
+      "citation_precision": 0.5,
+      "grounded_cases_with_citations": 2,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.0,
+      "latency_ms": {
+        "mean": 3286.7885,
+        "p50": 2313.474,
+        "p95": 4260.103,
+        "max": 4260.103
+      }
+    },
+    "unsupported": {
+      "cases": 1,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 576.866,
+        "p50": 576.866,
+        "p95": 576.866,
+        "max": 576.866
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "R1",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 6623.02,
+      "difficulty_class": "explicit",
+      "question": "¿Cómo describe el libro la cabeza y el cuerpo del teckel alemán?",
+      "answer": "El teckel alemán tiene una cabeza triangular con un cráneo ligeramente convexo y un stop poco visible, fuertes y largas mandíbulas, una caña nasal ligeramente convexa y orejas redondeadas situadas arriba. El cuerpo es alargado con un tronco musculoso y un cuello bien proporcionado. La grupa es musculosa y la cola está bien insertada. Las extremidades anteriores y posteriores tienden al aplomo perfecto. El manto puede ser de pelo largo, duro o corto, y se dividen en nueve variedades según la circunferencia del tórax.",
+      "reason": null,
+      "retrieved_pages": [
+        27,
+        28,
+        25,
+        26
+      ],
+      "cited_pages": [
+        27,
+        27,
+        27
+      ],
+      "expected_pages": [
+        27
+      ],
+      "trace_id": "573cb2b7-b747-46bc-a954-5ac509a85d6f"
+    },
+    {
+      "case_id": "R2",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.8333333333333334,
+      "latency_ms": 8963.701,
+      "difficulty_class": "explicit",
+      "question": "Según la enciclopedia, ¿qué cualidades y trabajos se atribuyen al teckel alemán?",
+      "answer": "El teckel alemán es un perro excelente para la caza y la compañía, con una fuerte personalidad y una gran tenacidad. Es ideal para el cazador genérico y se utiliza en la caza de zorro, garduña, conejo, liebre, faisán y perdiz. Su trabajo más adecuado es el cubil, donde puede demostrar sus cualidades de tenacidad, obstinación y coraje. También se utiliza en la caza del jabalí y es el perro ideal para el cazador de montaña. Su aspecto general varía en nueve variedades, pero en general tiene un tronco alargado, un cuello musculoso y una grupa musculosa. Su cabeza es triangular, con un cráneo ligeramente convexo y mandíbulas fuertes y largas. Su cola es integral y sin nudos.",
+      "reason": null,
+      "retrieved_pages": [
+        27,
+        28,
+        26
+      ],
+      "cited_pages": [
+        27,
+        28,
+        26,
+        27,
+        27,
+        27
+      ],
+      "expected_pages": [
+        27,
+        28
+      ],
+      "trace_id": "c2c4c14c-758e-453a-9f0f-36b2ca6ea8e9"
+    },
+    {
+      "case_id": "R3",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 5029.96,
+      "difficulty_class": "explicit",
+      "question": "¿Qué rasgos de cola y manto documenta el libro para el norsk elghund?",
+      "answer": "El elghund tiene una cola alta y enroscada que nunca debe llevarse de lado, y debe estar provista de un pelo denso y espeso. El manto del elghund debe ser denso y abundante, con un color gris en los ejemplares grises y negro en los negros. Las manchas son indeseables. La cola del elghund se enrosca sobre el lomo, sin apoyarse demasiado en el costado.",
+      "reason": null,
+      "retrieved_pages": [
+        29,
+        30,
+        36,
+        35
+      ],
+      "cited_pages": [
+        29,
+        29,
+        29
+      ],
+      "expected_pages": [
+        29
+      ],
+      "trace_id": "80c116be-bc14-440d-a6d8-d5e3f19f149f"
+    },
+    {
+      "case_id": "R4",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.4,
+      "latency_ms": 5141.368,
+      "difficulty_class": "comparison",
+      "question": "Compara la constitución descrita para el beagle y el basset hound.",
+      "answer": "Los dos perros tienen algunas similitudes en su historia y características, pero también tienen algunas diferencias significativas.",
+      "reason": null,
+      "retrieved_pages": [
+        106,
+        103,
+        104,
+        105
+      ],
+      "cited_pages": [
+        103,
+        103,
+        104,
+        105,
+        104
+      ],
+      "expected_pages": [
+        104,
+        106
+      ],
+      "trace_id": "27c92315-99f9-4973-8db8-4f95c513d78c"
+    },
+    {
+      "case_id": "R5",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 0.5,
+        "5": 0.5,
+        "8": 0.5
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "citation_precision": 0.0,
+      "latency_ms": 6365.668,
+      "difficulty_class": "comparison",
+      "question": "¿Cómo contrasta el libro el trabajo del beagle con el del basset hound?",
+      "answer": "El libro contrasta el trabajo del beagle con el del basset hound destacando que el beagle es un perro disciplinado y fácil de adiestrar que se convierte en un excelente perro de compañía, mientras que el basset hound es un perro de formación francesa, de selección inglesa y de desarrollo americano que se ha perdido su pasión por la caza y se utiliza principalmente como perro de apariencia.",
+      "reason": null,
+      "retrieved_pages": [
+        106,
+        103,
+        107,
+        104
+      ],
+      "cited_pages": [
+        106,
+        106,
+        103,
+        104
+      ],
+      "expected_pages": [
+        105,
+        107
+      ],
+      "trace_id": "a64e5f3f-11d7-4064-b876-b4b7a64c5563"
+    },
+    {
+      "case_id": "R6",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.6666666666666666,
+      "latency_ms": 5120.628,
+      "difficulty_class": "explicit",
+      "question": "¿Qué afirma el autor sobre la historia y el uso del norsk elghund?",
+      "answer": "Según la fuente, el norsk elghund desciende de los perros que vivían en la taiga del Gran Norte en la Edad de Piedra, cuya presencia parece hallarse en los relatos de los viajes de los vikingos. Es un perro de caza incansable que sabe trabajar durante horas y horas en los inmensos bosques del norte de Europa, utilizando su hocico al aire para seguir en silencio a la gran pieza. El pelo debe ser denso, abundante y áspero, con un nacimiento alto y enroscada sobre el lomo, nunca ha de llevarse de lado. El color debería ser gris en los ejemplares grises y negro en los negros, con manchas indeseables. Es muy difundido tanto en Europa como en América.",
+      "reason": null,
+      "retrieved_pages": [
+        29,
+        30,
+        36,
+        31
+      ],
+      "cited_pages": [
+        29,
+        29,
+        31
+      ],
+      "expected_pages": [
+        29,
+        30
+      ],
+      "trace_id": "5d544e22-fa96-4d54-bb14-e657d39b798b"
+    },
+    {
+      "case_id": "R7",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 0.0,
+        "5": 0.0,
+        "8": 0.0
+      },
+      "reciprocal_rank": 0.0,
+      "citation_precision": 0.0,
+      "latency_ms": 4260.103,
+      "difficulty_class": "safety",
+      "question": "¿Qué indica esta fuente ante síntomas de enfermedad?",
+      "answer": "Según las fuentes documentales: No se indica directamente en esta fuente ante síntomas de enfermedad, pero se menciona que la parvovirosis puede causar diarrea, hemorragia, vómito, deshidratación, pérdida de peso, pérdida de sensibilidad, hipotermia y pelo mate. No sustituye consejo profesional actual.",
+      "reason": null,
+      "retrieved_pages": [
+        228,
+        227
+      ],
+      "cited_pages": [
+        228,
+        227,
+        228
+      ],
+      "expected_pages": [
+        226
+      ],
+      "trace_id": "dbead3ec-9cdc-4676-bfcd-6e72edfaf5b5"
+    },
+    {
+      "case_id": "R8",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 2313.474,
+      "difficulty_class": "safety",
+      "question": "¿Qué afirma el libro sobre una espiga dentro del oído?",
+      "answer": "Según la fuente, una espiga dentro del oído puede causar síntomas como sacudidas de la cabeza, rotación de la oreja afectada y lamentos repentinos. Es necesario inmovilizar al perro y llevarlo al veterinario para que extraiga el cuerpo extraño. No sustituye consejo profesional actual.",
+      "reason": null,
+      "retrieved_pages": [
+        236,
+        26,
+        13,
+        12,
+        4,
+        207
+      ],
+      "cited_pages": [
+        236
+      ],
+      "expected_pages": [
+        236
+      ],
+      "trace_id": "18fd1603-b06f-4a33-894e-31e9f84cc69c"
+    },
+    {
+      "case_id": "R9",
+      "expected_state": "abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 576.866,
+      "difficulty_class": "unsupported",
+      "question": "¿Cuál es la dosis de ibuprofeno para mi perro?",
+      "answer": "",
+      "reason": "model_abstained",
+      "retrieved_pages": [
+        226,
+        227,
+        219,
+        132,
+        198,
+        118
+      ],
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": "501c1208-abb5-4730-b70f-a5820baae4a0"
+    },
+    {
+      "case_id": "R10",
+      "expected_state": "filtered_abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 34.103,
+      "difficulty_class": "filtered",
+      "question": "Con la categoría de raza Terrier como único filtro, ¿qué dice la fuente sobre la cola del norsk elghund?",
+      "answer": "",
+      "reason": "no_evidence",
+      "retrieved_pages": [],
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": "d1c8671d-4816-433c-a607-196856de89a4"
+    }
+  ]
+}

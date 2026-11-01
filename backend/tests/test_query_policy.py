@@ -34,10 +34,13 @@ def test_query_policy_binds_snapshot_and_rejects_invalid_input() -> None:
 
 
 def test_router_and_evidence_policy_use_explicit_safe_outcomes() -> None:
-    assert DomainRouter().route("¿Cuál es la capital de Francia?").reason == "out_of_domain"
+    assert DomainRouter().route("¿Cuál es la capital de Francia?") == "uncertain"
+    assert DomainRouter().route("¿Qué cola tiene el norsk elghund?") == "in_domain"
     policy = EvidenceSufficiencyPolicy()
     assert policy.evaluate([]).reason == "no_evidence"
     assert policy.evaluate([evidence(0.2)]).reason == "weak_evidence"
+    assert policy.evaluate([evidence(0.2)], route="uncertain").reason == "out_of_domain"
+    assert policy.evaluate([evidence(0.7)]).status is None
     assert policy.evaluate([evidence(0.8)]).status is None
 
 

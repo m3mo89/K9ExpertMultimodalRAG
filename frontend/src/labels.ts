@@ -80,6 +80,10 @@ const reasonMessages: Record<string, string> = {
   restore_in_progress: 'Hay una restauración en curso; las consultas están en pausa.',
   restore_sources_missing: 'Faltan archivos fuente tras la restauración.',
   index_rebuild_required: 'El índice debe reconstruirse antes de volver a consultar.',
+  model_abstained: 'Las fuentes recuperadas no responden directamente a la pregunta.',
+  invalid_citations: 'La respuesta generada no pudo verificarse contra la evidencia.',
+  model_output_invalid: 'El modelo devolvió una respuesta no verificable.',
+  model_unavailable: 'El modelo local no está disponible. Inténtelo de nuevo.',
 }
 
 export function reasonMessage(reason: string | null): string | null {

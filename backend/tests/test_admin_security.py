@@ -47,3 +47,30 @@ def test_expired_confirmation_is_rejected(tmp_path) -> None:
     token = repository.issue_confirmation("alice", "doc-1", "delete", "v1", expired)
     security = AdminSecurityService(repository, "secret")
     assert not security.consume_confirmation(token, "alice", "doc-1", "delete", "v1")
+
+
+def test_settings_load_from_toml_and_lan_exposure_is_explicit(tmp_path) -> None:
+    import pytest
+
+    from k9_expert.application.composition import load_settings
+    from k9_expert.serve import check_exposure
+
+    config = tmp_path / "k9.toml"
+    config.write_text(
+        '[server]\nhost = "0.0.0.0"\nallow_lan = false\n'
+        "[retrieval]\ntop_k = 4\nsufficiency_minimum_score = 0.7\n"
+        "[telemetry]\nstore_protected = false\n"
+    )
+    env = {"K9_CONFIG": str(config), "K9_DATA_DIR": str(tmp_path / "d")}
+    settings = load_settings(env)
+    assert (settings.retrieval_top_k, settings.sufficiency_minimum_score) == (4, 0.7)
+    assert settings.data_dir == tmp_path / "d" and settings.admin_secret is None
+    with pytest.raises(SystemExit, match="allow_lan"):
+        check_exposure(settings)
+    config.write_text('[server]\nhost = "0.0.0.0"\nallow_lan = true\n')
+    with pytest.raises(SystemExit, match="K9_ADMIN_SECRET"):
+        check_exposure(load_settings(env))
+    check_exposure(load_settings({**env, "K9_ADMIN_SECRET": "s"}))
+    check_exposure(load_settings({"K9_CONFIG": str(tmp_path / "absent.toml")}))
+    defaults = load_settings({"K9_CONFIG": "config/k9.defaults.toml"})
+    assert defaults.host == "127.0.0.1" and defaults.retrieval_top_k == 6

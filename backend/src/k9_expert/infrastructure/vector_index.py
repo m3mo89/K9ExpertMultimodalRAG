@@ -87,6 +87,28 @@ class ChromaGenerationIndex:
         )
         return list(result["ids"][0])
 
+    def search(
+        self, vector: Sequence[float], limit: int, filters: dict[str, object] | None = None
+    ) -> list[tuple[str, float]]:
+        """Nearest fragments with cosine similarity; vectors are stored L2-normalized."""
+        if self.collection.count() == 0:
+            return []
+        result = self.collection.query(
+            query_embeddings=[list(vector)],  # type: ignore[arg-type]
+            n_results=min(limit, self.collection.count()),
+            where=filters or None,  # type: ignore[arg-type]
+            include=["distances"],
+        )
+        distances = (result["distances"] or [[]])[0]
+        # Chroma's default space is squared L2; for unit vectors cos = 1 - d / 2.
+        return [
+            (str(fragment_id), 1 - float(distance) / 2)
+            for fragment_id, distance in zip(result["ids"][0], distances, strict=True)
+        ]
+
+    def drop(self) -> None:
+        self.client.delete_collection(self.collection.name)
+
     def records(self) -> list[VectorRecord]:
         result = self.collection.get(include=["documents", "embeddings", "metadatas"])
         ids = result["ids"]
@@ -143,5 +165,10 @@ def validate_generation(index: ChromaGenerationIndex, expected_count: int, dimen
         raise ValueError("index_count_mismatch")
     if any(len(record.vector) != dimensions for record in records):
         raise ValueError("index_dimension_mismatch")
-    if records and records[0].fragment_id not in index.query(records[0].vector, 1):
-        raise ValueError("index_retrieval_smoke_failed")
+    if records:
+        # Identical fragments (e.g. repeated text across documents) tie at distance zero.
+        probe = records[0]
+        hits = index.search(probe.vector, 5)
+        exact_tie = bool(hits) and hits[0][1] >= 1 - 1e-6
+        if probe.fragment_id not in {fragment_id for fragment_id, _ in hits} and not exact_tie:
+            raise ValueError("index_retrieval_smoke_failed")

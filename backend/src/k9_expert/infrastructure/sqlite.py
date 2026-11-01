@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
 
-from k9_expert.domain.models import DocumentStatus, JobStage
+from k9_expert.domain.models import DocumentStatus, JobStage, TraceEvent
+from k9_expert.domain.telemetry import redact
 
 SCHEMA_VERSION = 3
 
@@ -78,6 +80,17 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
 """ + CLEANUP_QUEUE_TABLE + REINDEX_TABLES
+
+
+INDEX_FRAGMENTS_SQL = """SELECT f.id, f.text, f.content_hash, f.version_id, f.page_start,
+f.section_path, v.document_id, v.file_path, d.category FROM snapshot_membership m
+JOIN fragments f ON f.id = m.fragment_id
+JOIN document_versions v ON v.id = f.version_id
+JOIN documents d ON d.id = v.document_id
+WHERE m.snapshot_id = ? ORDER BY f.version_id, f.ordinal"""
+
+# Builds and validates a candidate's vector generation: (snapshot_id, previous_id, rows).
+PrepareIndex = Callable[[str, str | None, list[sqlite3.Row]], None]
 
 
 class UnsupportedSchemaError(RuntimeError):
@@ -588,6 +601,23 @@ class ContentRepository:
             )
 
 
+    def fragment_ids_by_hash(self, version_id: str, content_hashes: list[str]) -> dict[str, str]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT id, content_hash FROM fragments WHERE version_id = ?", (version_id,)
+            ).fetchall()
+        wanted = set(content_hashes)
+        return {str(row["content_hash"]): str(row["id"]) for row in rows if row["content_hash"] in wanted}
+
+    def mark_candidate_version_failed(self, version_id: str) -> None:
+        """A failed candidate is visible as an error; an already active version is untouched."""
+        with self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE document_versions SET status = ? WHERE id = ? AND status = ?",
+                (DocumentStatus.ERROR, version_id, DocumentStatus.CANDIDATE),
+            )
+
+
 class SnapshotRepository:
     def __init__(self, database: SqliteDatabase) -> None:
         self.database = database
@@ -646,10 +676,46 @@ class SnapshotRepository:
                 raise ValueError("snapshot_contains_deleted_source")
             connection.execute("UPDATE snapshots SET status = 'retained' WHERE status = 'active'")
             connection.execute("UPDATE snapshots SET status = 'active' WHERE id = ?", (str(snapshot_id),))
+            # Library state follows the restored membership: each represented document points
+            # at the version its fragments belong to; unrepresented active ones leave the library.
+            represented = connection.execute(
+                """SELECT DISTINCT v.document_id, v.id AS version_id FROM snapshot_membership m
+                JOIN fragments f ON f.id = m.fragment_id JOIN document_versions v ON v.id = f.version_id
+                WHERE m.snapshot_id = ?""",
+                (str(snapshot_id),),
+            ).fetchall()
+            timestamp = now()
+            for row in represented:
+                connection.execute(
+                    "UPDATE documents SET active_version_id = ?, status = ?, updated_at = ? WHERE id = ?",
+                    (row["version_id"], DocumentStatus.ACTIVE, timestamp, row["document_id"]),
+                )
+                connection.execute(
+                    "UPDATE document_versions SET status = ? WHERE id = ?", (DocumentStatus.ACTIVE, row["version_id"])
+                )
+            placeholders = ", ".join("?" for _ in represented) or "''"
+            connection.execute(
+                f"UPDATE documents SET status = ?, updated_at = ? WHERE status = ? AND id NOT IN ({placeholders})",
+                (DocumentStatus.DEACTIVATED, timestamp, DocumentStatus.ACTIVE, *(row["document_id"] for row in represented)),
+            )
             connection.execute(
                 "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (str(snapshot_id),),
             )
+
+    def active_membership_snapshot_id(self) -> str | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM system_state WHERE key = 'active_snapshot_id'"
+            ).fetchone()
+        return None if row is None else str(row["value"])
+
+    def membership(self, snapshot_id: str) -> list[str]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT fragment_id FROM snapshot_membership WHERE snapshot_id = ?", (snapshot_id,)
+            )
+            return [str(row["fragment_id"]) for row in rows]
 
     def active_membership(self) -> list[str]:
         with self.database.connect() as connection:
@@ -666,20 +732,126 @@ class SnapshotRepository:
     def index_fragments(self, snapshot_id: str) -> list[sqlite3.Row]:
         """Everything needed to rebuild a snapshot's vector generation from authoritative data."""
         with self.database.connect() as connection:
+            return list(connection.execute(INDEX_FRAGMENTS_SQL, (snapshot_id,)))
+
+    def evidence_rows(self, snapshot_id: str, fragment_ids: list[str]) -> list[sqlite3.Row]:
+        """Bibliographic context for retrieved fragments, restricted to the bound snapshot."""
+        if not fragment_ids:
+            return []
+        placeholders = ", ".join("?" for _ in fragment_ids)
+        with self.database.connect() as connection:
             return list(
                 connection.execute(
-                    """SELECT f.id, f.text, f.version_id, f.page_start, f.section_path,
-                    v.document_id, v.file_path, d.category FROM snapshot_membership m
-                    JOIN fragments f ON f.id = m.fragment_id
+                    f"""SELECT f.id, f.text, f.page_start, f.section_path, f.version_id,
+                    v.document_id, v.edition, d.title, d.author, p.printed_page_label
+                    FROM snapshot_membership m JOIN fragments f ON f.id = m.fragment_id
                     JOIN document_versions v ON v.id = f.version_id
                     JOIN documents d ON d.id = v.document_id
-                    WHERE m.snapshot_id = ? ORDER BY f.version_id, f.ordinal""",
-                    (snapshot_id,),
+                    LEFT JOIN pages p ON p.version_id = f.version_id AND p.physical_page = f.page_start
+                    WHERE m.snapshot_id = ? AND f.id IN ({placeholders})""",
+                    (snapshot_id, *fragment_ids),
                 )
             )
 
+    def publish_version(
+        self,
+        snapshot_id: UUID,
+        version_id: str,
+        fragment_ids: list[str],
+        embedding: tuple[str, str, int],
+        prepare_index: PrepareIndex | None = None,
+    ) -> tuple[str | None, str]:
+        """Atomically publish a version: candidate membership, index hook, then activation.
+
+        Membership keeps every other document's fragments from the active snapshot. If the
+        hook or any check fails, the transaction rolls back and the previous snapshot stays.
+        """
+        timestamp = now()
+        with self.database.transaction() as connection:
+            target = connection.execute(
+                """SELECT v.document_id, d.status, d.active_version_id FROM document_versions v
+                JOIN documents d ON d.id = v.document_id WHERE v.id = ?""",
+                (version_id,),
+            ).fetchone()
+            if target is None:
+                raise KeyError("version_not_found")
+            if target["status"] == DocumentStatus.DELETED:
+                raise ValueError("document_deleted")
+            if fragment_ids:
+                placeholders = ", ".join("?" for _ in fragment_ids)
+                owned = connection.execute(
+                    f"SELECT COUNT(*) FROM fragments WHERE version_id = ? AND id IN ({placeholders})",
+                    (version_id, *fragment_ids),
+                ).fetchone()[0]
+                if owned != len(set(fragment_ids)):
+                    raise ValueError("fragment_not_in_version")
+            active = connection.execute(
+                """SELECT s.* FROM snapshots s JOIN system_state state
+                ON state.key = 'active_snapshot_id' AND state.value = s.id"""
+            ).fetchone()
+            if active is not None and (
+                active["embedding_alias"], active["embedding_model"], active["embedding_dimensions"]
+            ) != embedding:
+                raise ValueError("full_reindex_required")
+            connection.execute(
+                "INSERT INTO snapshots VALUES (?, ?, ?, ?, 'candidate', ?, NULL)",
+                (str(snapshot_id), *embedding, timestamp),
+            )
+            if active is not None:
+                connection.execute(
+                    """INSERT INTO snapshot_membership (snapshot_id, fragment_id)
+                    SELECT ?, m.fragment_id FROM snapshot_membership m
+                    JOIN fragments f ON f.id = m.fragment_id
+                    JOIN document_versions v ON v.id = f.version_id
+                    WHERE m.snapshot_id = ? AND v.document_id != ?""",
+                    (str(snapshot_id), active["id"], target["document_id"]),
+                )
+            # A deactivated document gets its new version recorded but stays out of queries.
+            included = target["status"] != DocumentStatus.DEACTIVATED
+            if included:
+                connection.executemany(
+                    "INSERT OR IGNORE INTO snapshot_membership (snapshot_id, fragment_id) VALUES (?, ?)",
+                    [(str(snapshot_id), fragment_id) for fragment_id in fragment_ids],
+                )
+            if prepare_index is not None:
+                rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
+                prepare_index(str(snapshot_id), active["id"] if active else None, rows)
+            if target["active_version_id"] not in (None, version_id):
+                connection.execute(
+                    "UPDATE document_versions SET status = 'superseded' WHERE id = ?",
+                    (target["active_version_id"],),
+                )
+            connection.execute(
+                "UPDATE document_versions SET status = ? WHERE id = ?",
+                (DocumentStatus.ACTIVE, version_id),
+            )
+            connection.execute(
+                "UPDATE documents SET active_version_id = ?, status = ?, updated_at = ? WHERE id = ?",
+                (
+                    version_id,
+                    DocumentStatus.ACTIVE if included else DocumentStatus.DEACTIVATED,
+                    timestamp,
+                    target["document_id"],
+                ),
+            )
+            if active is not None:
+                connection.execute("UPDATE snapshots SET status = 'retained' WHERE id = ?", (active["id"],))
+            connection.execute(
+                "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ?",
+                (timestamp, str(snapshot_id)),
+            )
+            connection.execute(
+                "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(snapshot_id),),
+            )
+        return (str(active["id"]) if active else None), str(snapshot_id)
+
     def publish_document_membership(
-        self, snapshot_id: UUID, document_id: str, include: bool
+        self,
+        snapshot_id: UUID,
+        document_id: str,
+        include: bool,
+        prepare_index: PrepareIndex | None = None,
     ) -> tuple[str, str]:
         timestamp = now()
         with self.database.transaction() as connection:
@@ -728,6 +900,9 @@ class SnapshotRepository:
             ).fetchone()
             if invalid is None or invalid["count"]:
                 raise ValueError("invalid_snapshot_membership")
+            if prepare_index is not None:
+                rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
+                prepare_index(str(snapshot_id), str(active["id"]), rows)
             connection.execute(
                 "UPDATE snapshots SET status = 'retained' WHERE id = ?", (active["id"],)
             )
@@ -929,6 +1104,69 @@ class InteractionRepository:
                 sqlite3.Row,
                 connection.execute("SELECT * FROM feedback WHERE id = ?", (str(feedback_id),)).fetchone(),
             )
+
+
+    def expire_feedback_comments(self, before: str) -> int:
+        """Retention: keep the useful/not-useful signal but drop raw comments after the window."""
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE feedback SET comment = NULL WHERE comment IS NOT NULL AND created_at < ?", (before,)
+            )
+            return cursor.rowcount
+
+
+class TraceRepository:
+    """Trace sink; protected attributes are dropped on write unless explicitly enabled."""
+
+    def __init__(self, database: SqliteDatabase, store_protected: bool = False) -> None:
+        self.database = database
+        self.store_protected = store_protected
+
+    def emit(self, event: TraceEvent) -> None:
+        attributes = redact(event.attributes, include_protected=self.store_protected)
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO traces VALUES (?, ?, ?, ?)",
+                (event.trace_id, event.event, json.dumps(attributes, ensure_ascii=False), event.occurred_at.isoformat()),
+            )
+
+    def get(self, trace_id: str) -> dict[str, object] | None:
+        with self.database.connect() as connection:
+            row = connection.execute("SELECT * FROM traces WHERE id = ?", (trace_id,)).fetchone()
+        return None if row is None else _trace(row)
+
+    def list(
+        self, kind: str | None = None, job_id: str | None = None, since: str | None = None, limit: int = 100
+    ) -> list[dict[str, object]]:
+        clauses, parameters = [], []
+        if kind is not None:
+            clauses.append("event = ?")
+            parameters.append(kind)
+        if job_id is not None:
+            clauses.append("json_extract(attributes_json, '$.job_id') = ?")
+            parameters.append(job_id)
+        if since is not None:
+            clauses.append("created_at >= ?")
+            parameters.append(since)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM traces {where} ORDER BY created_at DESC LIMIT ?", (*parameters, limit)
+            ).fetchall()
+        return [_trace(row) for row in rows]
+
+    def purge(self, before: str) -> int:
+        with self.database.transaction() as connection:
+            return connection.execute("DELETE FROM traces WHERE created_at < ?", (before,)).rowcount
+
+
+def _trace(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "trace_id": row["id"],
+        "kind": row["event"],
+        "created_at": row["created_at"],
+        "attributes": json.loads(row["attributes_json"]),
+    }
 
 
 class SecurityRepository:

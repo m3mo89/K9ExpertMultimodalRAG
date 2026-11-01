@@ -1,6 +1,11 @@
 import { useCallback } from 'react'
 import { useAdmin, useApi } from '../../api/hooks'
-import type { AdminCredentials, ComponentState, OperationalMetrics } from '../../api/types'
+import type {
+  AdminCredentials,
+  ComponentState,
+  OperationalMetrics,
+  RecentTraceMetrics,
+} from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAsync } from '../../hooks'
@@ -132,12 +137,39 @@ function Metrics({ admin }: { admin: AdminCredentials }) {
           </dd>
         </div>
       </dl>
+      {data.recent && <RecentActivity recent={data.recent} />}
       <div className="table-grid">
         <CountTable caption="Consultas por resultado" counts={data.queries} labels={queryStatusLabels} />
         <CountTable caption="Documentos por estado" counts={data.documents} labels={sourceStatusLabels} />
         <CountTable caption="Trabajos de ingesta por etapa" counts={data.jobs} labels={jobStageLabels} />
       </div>
     </section>
+  )
+}
+
+function formatMs(value: number | null) {
+  return value === null ? '—' : `${Math.round(value)} ms`
+}
+
+function RecentActivity({ recent }: { recent: RecentTraceMetrics }) {
+  const lookups = recent.cache.hits + recent.cache.misses
+  return (
+    <dl className="stat-row" aria-label={`Actividad de las últimas ${recent.window_hours} h`}>
+      <div className="stat">
+        <dt>Latencia p50 / p95</dt>
+        <dd>
+          {formatMs(recent.latency_ms.p50)} / {formatMs(recent.latency_ms.p95)}
+        </dd>
+      </div>
+      <div className="stat">
+        <dt>Aciertos de caché</dt>
+        <dd>{lookups ? `${Math.round((recent.cache.hits / lookups) * 100)} %` : '—'}</dd>
+      </div>
+      <div className="stat">
+        <dt>Páginas ingeridas / min</dt>
+        <dd>{recent.ingestion.pages_per_minute ?? '—'}</dd>
+      </div>
+    </dl>
   )
 }
 

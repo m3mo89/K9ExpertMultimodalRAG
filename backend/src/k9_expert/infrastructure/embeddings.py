@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import cast
+from typing import Protocol, cast
 
 import httpx
 
@@ -106,22 +106,39 @@ class EmbeddingCache:
         (self.root / f"{key}.json").write_text(json.dumps(list(vector)), encoding="utf-8")
 
 
+class DocumentEmbedder(Protocol):
+    alias: str
+    model: str
+
+    def embed_documents(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
+
+
 class CachingEmbedder:
-    def __init__(self, delegate: OllamaEmbedder, cache: EmbeddingCache) -> None:
+    """Content-addressed reuse: unchanged fragments never reach the embedding model."""
+
+    def __init__(
+        self, delegate: DocumentEmbedder, cache: EmbeddingCache, dimensions: int = 768
+    ) -> None:
         self.delegate = delegate
         self.cache = cache
         self.alias = delegate.alias
+        self.dimensions = dimensions
+        # Cumulative; the difference across a job is how many vectors the model computed.
+        self.hits = 0
+        self.misses = 0
 
     def embed_documents(self, fragments: Sequence[tuple[str, str]]) -> list[list[float]]:
         keys = [
-            self.cache.key(content_hash, self.alias, self.delegate.model, 768)
+            self.cache.key(content_hash, self.alias, self.delegate.model, self.dimensions)
             for content_hash, _ in fragments
         ]
         results: list[list[float] | None] = [self.cache.get(key) for key in keys]
         missing = [
             text for result, (_, text) in zip(results, fragments, strict=True) if result is None
         ]
-        fresh = iter(self.delegate.embed_documents(missing))
+        fresh = iter(self.delegate.embed_documents(missing) if missing else [])
+        self.misses += len(missing)
+        self.hits += len(fragments) - len(missing)
         for index, result in enumerate(results):
             if result is None:
                 vector = list(next(fresh))

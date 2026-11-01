@@ -48,6 +48,7 @@ def build(
 ) -> tuple[ApplicationContainer, TestClient]:
     config = tmp_path / "k9.toml"
     config.write_text("[server]\nhost = '127.0.0.1'\n")
+    overrides.setdefault("embedding_dimensions", 3)  # DeterministicEmbedder vectors
     settings = ApplicationSettings(
         data_dir=tmp_path / "data", admin_secret=SECRET, config_path=config, **overrides
     )  # type: ignore[arg-type]
@@ -99,7 +100,8 @@ def seed_document(
         if snapshot_id is None:
             snapshot_id = str(uuid4())
             connection.execute(
-                "INSERT INTO snapshots VALUES (?, 'alias', 'model', 3, 'active', ?, ?)",
+                "INSERT INTO snapshots VALUES "
+                "(?, 'embedding-test', 'test-double:embedding-test', 3, 'active', ?, ?)",
                 (snapshot_id, TIMESTAMP, TIMESTAMP),
             )
             connection.execute(
@@ -226,8 +228,15 @@ def test_targeted_and_complete_reindex_report_progress_and_failures(tmp_path) ->
     assert progress["completed"] == 1 and progress["failed"] == 1
     failed = [job for job in progress["jobs"] if job["error_code"]]
     assert failed[0]["version_id"] == bad["version"]
-    # Fragments referenced by the published snapshot survive re-ingestion.
-    assert container.lifecycle_service.snapshots.active_membership().count(good["fragment"]) == 1
+    # Re-ingestion publishes the re-extracted fragments; the failed document keeps its
+    # previous membership, and fragments of retained snapshots survive as evidence.
+    active = container.lifecycle_service.snapshots.active_membership()
+    assert good["fragment"] not in active and bad["fragment"] in active and len(active) == 2
+    database = SqliteDatabase(container.settings.data_dir / "k9.sqlite")
+    with database.connect() as connection:
+        assert connection.execute(
+            "SELECT 1 FROM fragments WHERE id = ?", (good["fragment"],)
+        ).fetchone()
 
 
 def test_admin_health_reports_degraded_components_without_secrets(tmp_path) -> None:

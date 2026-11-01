@@ -20,6 +20,7 @@ embedding_dimensions = 768
 embedding_query_prefix = "search_query: "
 embedding_document_prefix = "search_document: "
 generation_timeout_seconds = 120
+generation_context_window = 8192
 embedding_timeout_seconds = 120
 
 [upload]
@@ -29,8 +30,8 @@ max_query_characters = 2000
 max_feedback_characters = 1000
 
 [extraction]
-extractor_version = "pdfkit-spike-2026-11-01"
-chunking_version = "v1"
+extractor_version = "pymupdf-direct-v2"
+chunking_version = "page-section-v2"
 ocr_non_whitespace_character_threshold = 40
 ocr_token_threshold = 8
 ocr_low_text_character_threshold = 160
@@ -38,13 +39,26 @@ ocr_language = "spa"
 ocr_timeout_seconds = 90
 
 [retrieval]
-top_k = 8
+candidates = 24
+top_k = 6
 minimum_similarity = 0.0
-max_context_tokens = 6000
+# Words of evidence; fits the generation context window below together with the prompt.
+max_context_tokens = 2500
+max_per_section = 2
+# Provisional, calibrated on the reference corpus (docs/evaluation/baseline-2026-11-01.md).
+sufficiency_minimum_score = 0.68
 
 [cache]
 exact_response_enabled = true
 
 [retention]
 trace_days = 30
+deleted_source_days = 30
+# Raw feedback comments are cleared after this window; the useful/not-useful signal remains.
+feedback_comment_days = 90
 confirmation_token_seconds = 300
+
+[telemetry]
+# Traces never store full questions, document text, files, secrets or raw feedback by default.
+# Enabling this keeps full questions in stored traces for privileged troubleshooting exports only.
+store_protected = false

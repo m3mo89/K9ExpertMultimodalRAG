@@ -116,3 +116,46 @@ def test_encyclopedia_golden_pages_preserve_direct_text_ocr_selection_and_page_l
     chunks = PageAwareChunker(max_tokens=80, overlap_tokens=10).chunk(structured)
     assert chunks
     assert all(chunk.covered_pages == (10,) for chunk in chunks)
+
+
+def test_typographic_headings_and_section_chunks_name_their_topic() -> None:
+    def block(text: str, font: str = "Body-Regular", bold: bool = False) -> TextBlock:
+        return TextBlock(text, 0, 0, 10, 10, font, bold, "Italic" in font)
+
+    body = "Con un nacimiento alto y enroscada sobre el lomo, nunca ha de llevarse de lado."
+    page = ExtractedPage(
+        physical_page=29,
+        width=100,
+        height=100,
+        text="",
+        blocks=(
+            block("PERROS DE CAZA NÓRDICOS", "Title-Bold", bold=True),
+            block("Norsk elghund", "Title-Italic"),
+            block("Cola"),
+            block(body),
+            block("2. Saltar con la piel de cobro."),
+            block("Ejemplar de norsk elghund gris."),
+        ),
+        non_whitespace_characters=200,
+        token_count=40,
+    )
+    structured = HeadingDetector().structure([page])
+    assert [item.section_path for item in structured] == [
+        ("Perros de caza nórdicos", "Norsk elghund", "Cola")
+    ] * 3
+    [chunk] = PageAwareChunker().chunk(structured)
+    assert chunk.text.startswith("Perros de caza nórdicos › Norsk elghund › Cola\n")
+    assert chunk.chunking_version == "page-section-v2"
+
+
+def test_encyclopedia_golden_structure_keeps_breed_context() -> None:
+    pages = PdfExtractor().extract(Path("docs/references/enciclopedia-perros-caza.pdf"))
+    chunks = PageAwareChunker().chunk(HeadingDetector().structure(pages))
+    by_text = {chunk.text.split("\n", 1)[-1][:40]: chunk for chunk in chunks}
+    tail = next(c for c in chunks if "enroscada sobre el lomo" in c.text)
+    assert tail.covered_pages == (29,)
+    assert tail.section_path == ("Perros de caza nórdicos", "Norsk elghund", "Cola")
+    ear = next(c for c in chunks if "espigas dentro del oído" in c.text)
+    assert ear.covered_pages == (236,) and ear.section_path[0] == "Indicaciones prácticas"
+    assert not any(path.endswith(".") for c in chunks for path in c.section_path)
+    assert len(by_text) > 600

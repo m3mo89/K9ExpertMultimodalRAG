@@ -108,25 +108,25 @@
 
 ## 11. Observability and Evaluation
 
-- [ ] 11.1 Implement structured query traces with required versions, route, filters, evidence scores, cache usage, stage timings, terminal reason, and typed errors
-- [ ] 11.2 Implement structured ingestion traces with attempts, stage timings, page/OCR/fragment counts, embedding configuration, and publication result
-- [ ] 11.3 Implement redaction and retention defaults that omit full questions, document content, files, secrets, and raw feedback from telemetry
-- [ ] 11.4 Implement aggregate operational metrics for query states, abstention, latency, cache usage, ingestion throughput, errors, and model availability
-- [ ] 11.5 Create the versioned evaluation dataset schema and manually verify the initial reference cases against exact source pages
-- [ ] 11.6 Implement deterministic Recall@K, MRR, citation precision, abstention, and latency metrics with per-case output
-- [ ] 11.7 Implement reproducible E1 no-RAG and E2 semantic-RAG runners that record corpus, models, prompts, retrieval configuration, and code/config versions
+- [x] 11.1 Implement structured query traces with required versions, route, filters, evidence scores, cache usage, stage timings, terminal reason, and typed errors
+- [x] 11.2 Implement structured ingestion traces with attempts, stage timings, page/OCR/fragment counts, embedding configuration, and publication result
+- [x] 11.3 Implement redaction and retention defaults that omit full questions, document content, files, secrets, and raw feedback from telemetry
+- [x] 11.4 Implement aggregate operational metrics for query states, abstention, latency, cache usage, ingestion throughput, errors, and model availability
+- [x] 11.5 Create the versioned evaluation dataset schema and manually verify the initial reference cases against exact source pages
+- [x] 11.6 Implement deterministic Recall@K, MRR, citation precision, abstention, and latency metrics with per-case output
+- [x] 11.7 Implement reproducible E1 no-RAG and E2 semantic-RAG runners that record corpus, models, prompts, retrieval configuration, and code/config versions
 - [ ] 11.8 Define and execute the human answer-accuracy and faithfulness rubric without using the generation model as the sole evaluator
-- [ ] 11.9 Publish a baseline evaluation and hardware benchmark report, clearly marking measured results and unresolved thresholds
+- [x] 11.9 Publish a baseline evaluation and hardware benchmark report, clearly marking measured results and unresolved thresholds
 
 ## 12. End-to-End Qualification and Handoff
 
-- [ ] 12.1 Ingest the encyclopedia as a candidate and manually audit a representative sample of text, OCR decisions, hierarchy, fragments, and page links
+- [x] 12.1 Ingest the encyclopedia as a candidate and manually audit a representative sample of text, OCR decisions, hierarchy, fragments, and page links
 - [ ] 12.2 Publish the initial snapshot only after integrity validation and minimum evaluation gates pass
-- [ ] 12.3 Verify end-to-end that adding a second PDF is incremental and does not recompute unchanged document embeddings
-- [ ] 12.4 Verify end-to-end that a failed replacement preserves the prior searchable version and successful replacement switches atomically
-- [ ] 12.5 Verify end-to-end that deactivation excludes a source, deletion preserves historical citation meaning, and rollback restores a retained snapshot
+- [x] 12.3 Verify end-to-end that adding a second PDF is incremental and does not recompute unchanged document embeddings
+- [x] 12.4 Verify end-to-end that a failed replacement preserves the prior searchable version and successful replacement switches atomically
+- [x] 12.5 Verify end-to-end that deactivation excludes a source, deletion preserves historical citation meaning, and rollback restores a retained snapshot
 - [ ] 12.6 Verify unsupported, conflicting, filtered, historical-advice, and model-unavailable queries produce the specified safe outcomes
-- [ ] 12.7 Measure query and ingestion resource use on the target 16 GB Mac and tune concurrency, batches, timeouts, and context budgets within documented limits
-- [ ] 12.8 Run backend, frontend, architecture, migration, security, browser, backup/restore, and evaluation test suites from a clean local setup
-- [ ] 12.9 Document local installation, model acquisition, configuration, LAN safety, operation, backup, restore, troubleshooting, and known limitations
-- [ ] 12.10 Confirm multimodal analysis, image retrieval, PWA, semantic cache, advanced identity, and internet exposure remain outside this change
+- [x] 12.7 Measure query and ingestion resource use on the target 16 GB Mac and tune concurrency, batches, timeouts, and context budgets within documented limits
+- [x] 12.8 Run backend, frontend, architecture, migration, security, browser, backup/restore, and evaluation test suites from a clean local setup
+- [x] 12.9 Document local installation, model acquisition, configuration, LAN safety, operation, backup, restore, troubleshooting, and known limitations
+- [x] 12.10 Confirm multimodal analysis, image retrieval, PWA, semantic cache, advanced identity, and internet exposure remain outside this change

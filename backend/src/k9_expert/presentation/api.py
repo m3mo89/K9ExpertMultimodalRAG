@@ -125,6 +125,8 @@ class QueryResponse(BaseModel):
     reason: str | None
     citations: list[dict[str, object]]
     conversation_id: str | None = None
+    trace_id: str | None = None
+    discrepancy: bool = False
 
 
 class ErrorEnvelope(BaseModel):
@@ -258,6 +260,23 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             document_id=document_id, snapshot_id=snapshot_id, status="active"
         )
 
+    @app.post(
+        "/api/v1/admin/snapshots/{snapshot_id}/rollback",
+        dependencies=[Depends(require_admin)],
+    )
+    def rollback_snapshot(
+        snapshot_id: str,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, str]:
+        try:
+            active = resolved.lifecycle_service.rollback(snapshot_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        resolved.admin_security.record(x_k9_actor, "snapshot_rolled_back", snapshot_id)
+        return {"snapshot_id": active, "status": "active"}
+
     @app.delete(
         "/api/v1/documents/{document_id}",
         response_model=PublicationResponse,
@@ -344,6 +363,27 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     def metrics() -> dict[str, object]:
         return resolved.metrics_service.report()
 
+    @app.get("/api/v1/admin/traces", dependencies=[Depends(require_admin)])
+    def list_traces(
+        kind: Annotated[str | None, Query(pattern="^(query|ingestion)$")] = None,
+        job_id: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    ) -> list[dict[str, object]]:
+        return resolved.telemetry.recent(kind=kind, job_id=job_id, limit=limit)
+
+    @app.get("/api/v1/admin/traces/{trace_id}", dependencies=[Depends(require_admin)])
+    def export_trace(
+        trace_id: str,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+        include_protected: bool = False,
+    ) -> dict[str, object]:
+        exported = resolved.telemetry.export(trace_id, include_protected)
+        if exported is None:
+            raise HTTPException(status_code=404, detail="trace_not_found")
+        if include_protected:
+            resolved.admin_security.record(x_k9_actor, "trace_protected_export", trace_id)
+        return exported
+
     @app.get("/api/v1/admin/backups", dependencies=[Depends(require_admin)])
     def list_backups() -> list[dict[str, object]]:
         return resolved.backup_service.list()
@@ -409,6 +449,8 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             answer=result.answer,
             snapshot_id=str(result.snapshot_id) if result.snapshot_id else None,
             reason=result.reason,
+            trace_id=result.trace_id,
+            discrepancy=result.discrepancy,
             conversation_id=str(request.conversation_id) if request.conversation_id else None,
             citations=[
                 {

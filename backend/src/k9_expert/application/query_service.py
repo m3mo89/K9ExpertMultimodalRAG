@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import uuid4
 
+from k9_expert.application.observability import TraceRecorder
 from k9_expert.application.query import QueryOrchestrator, QueryRequest
 from k9_expert.domain.models import QueryFilters, QueryId, QueryResult, QueryStatus
 from k9_expert.infrastructure.sqlite import (
@@ -44,11 +45,18 @@ class QueryService:
     def submit(self, command: SubmitQuery) -> StoredQueryResult:
         disabled = self.state.queries_disabled_reason() if self.state else None
         if disabled is not None:
+            query_id = QueryId(uuid4())
+            trace = TraceRecorder("query")
+            trace.set(query_id=str(query_id), generation_called=False, cache_hit=False)
+            with trace.stage("availability"):
+                pass
+            trace.finish(self.orchestrator.sink, str(QueryStatus.UNAVAILABLE), disabled)
             unavailable = QueryResult(
-                query_id=QueryId(uuid4()),
+                query_id=query_id,
                 status=QueryStatus.UNAVAILABLE,
                 answer="",
                 snapshot_id=None,
+                trace_id=trace.trace_id,
                 reason=disabled,
             )
             return StoredQueryResult(unavailable, None)

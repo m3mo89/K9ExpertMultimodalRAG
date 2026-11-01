@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen/slotted: raised exceptions must accept __traceback__ assignment.
+@dataclass(eq=False)
 class DomainError(Exception):
     code: str
     message: str
@@ -20,6 +21,11 @@ class ValidationError(DomainError):
 class ModelUnavailableError(DomainError):
     def __init__(self, message: str = "El modelo local no está disponible.") -> None:
         super().__init__("model_unavailable", message, retryable=True)
+
+
+class ModelOutputError(DomainError):
+    def __init__(self, message: str = "El modelo devolvió una estructura no verificable.") -> None:
+        super().__init__("model_output_invalid", message, retryable=False)
 
 
 class OcrUnavailableError(DomainError):

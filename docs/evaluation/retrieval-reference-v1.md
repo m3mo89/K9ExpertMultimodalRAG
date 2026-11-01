@@ -6,6 +6,8 @@ Este conjunto permite medir recuperación textual del PDF `Enciclopedia de los p
 
 Los casos se verificaron mediante extracción directa de texto con PDFKit el 2026-11-01. Son casos de recuperación: la respuesta de generación debe mantenerse atribuida a la fuente, no sustituye evaluación profesional, veterinaria ni de estándares vigentes.
 
+La versión ejecutable y versionada de estos casos es `evaluation/datasets/k9-reference-v1.json` (v1.0.0), con procedencia de revisión por caso. Se re-verificó el 2026-11-01 con extracción PyMuPDF: todos los `required_terms` de R1–R8 aparecen en las páginas físicas indicadas, y R9 no tiene respaldo en el corpus. La firma humana de esa re-verificación sigue pendiente.
+
 ## Convenciones
 
 - `expected_pages`: al menos una de estas páginas debe aparecer entre los resultados relevantes.

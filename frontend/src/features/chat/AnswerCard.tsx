@@ -10,6 +10,7 @@ export interface AnswerView {
   reason: string | null
   answerId: string | null
   citations: CitationSummary[]
+  discrepancy?: boolean
 }
 
 interface Props {
@@ -49,6 +50,12 @@ export function AnswerCard({ pending, result, error, onRetry }: Props) {
     return (
       <article className="answer answer-grounded" aria-label={queryStatusLabels.grounded}>
         <p className="section-label">Síntesis documental</p>
+        {result.discrepancy && (
+          <p className="notice notice-warn" role="note">
+            Las fuentes de la biblioteca discrepan en este punto; cada posición se muestra con su
+            propia cita.
+          </p>
+        )}
         <div className="answer-text">{result.answer}</div>
         <CitationList citations={result.citations} />
         {result.answerId && <FeedbackControls answerId={result.answerId} />}

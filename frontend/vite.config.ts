@@ -12,6 +12,13 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8000',
     },
   },
+  // Serving the built app on the LAN keeps the API itself bound to loopback.
+  preview: {
+    host: '127.0.0.1',
+    proxy: {
+      '/api': 'http://127.0.0.1:8000',
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

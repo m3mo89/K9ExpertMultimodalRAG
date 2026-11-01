@@ -18,6 +18,7 @@ def run(
         container.system_state.record_worker_heartbeat()
         if cycle % cleanup_every == 0:
             container.lifecycle_service.run_due_cleanup()
+            container.telemetry.apply_retention()
         worked = container.ingestion_worker.run_once()
         cycle += 1
         if not worked and (iterations is None or cycle < iterations):

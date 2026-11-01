@@ -1,0 +1,361 @@
+{
+  "manifest": {
+    "run_id": "20261101T235301Z-E1-c29f7a",
+    "experiment": "E1",
+    "started_at": "2026-11-01T23:53:01.796085+00:00",
+    "finished_at": "2026-11-01T23:53:13.868441+00:00",
+    "dataset": {
+      "id": "k9-reference",
+      "version": "1.0.0",
+      "sha256": "4ac5077f20b6499a8a88aa0d9cabe9b3ba946a58cade5703a2896c8484b80cee"
+    },
+    "prompt_version": "no-rag-v1",
+    "models": {
+      "text_alias": "text-default",
+      "text_model": "llama3.2:3b",
+      "text_resolved_model": "llama3.2:3b"
+    },
+    "retrieval": null,
+    "corpus": {
+      "snapshot_id": "acbd3685-79db-4f71-870b-3f45290f024b",
+      "fragment_count": 934,
+      "documents": [
+        {
+          "id": "e79986db-50a8-47e6-945d-0f78dd4afe43",
+          "title": "Enciclopedia de los perros de caza",
+          "active_version_id": "144519b5-558d-4946-a1d6-952daa5760ee"
+        },
+        {
+          "id": "0393df0b-d572-4aa0-8ef4-83dbcbaf89ab",
+          "title": "Capas de un producto de IA",
+          "active_version_id": "a4e6a497-6ce6-48fd-9385-d2fdf7ac7b4a"
+        }
+      ]
+    },
+    "code": {
+      "git_commit": "c5b352c43bc24a6c15a561a31f28601aaee53051",
+      "git_dirty": true
+    },
+    "configuration": {
+      "path": "config/k9.defaults.toml",
+      "sha256": "1e1c4fcfa1e8a0ebf31d368b8ecc3e689ce7959e62a888457cfacd1174f74864"
+    },
+    "environment": {
+      "python": "3.13.13",
+      "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+      "machine": "arm64",
+      "processor": "arm",
+      "memory_bytes": 19327352832
+    }
+  },
+  "aggregate": {
+    "cases": 10,
+    "recall_at_k": null,
+    "mrr": null,
+    "citation_precision": null,
+    "grounded_cases_with_citations": 0,
+    "abstention_accuracy": 0.5,
+    "correct_abstention_rate": 1.0,
+    "false_abstention_rate": 0.625,
+    "latency_ms": {
+      "mean": 1207.1158,
+      "p50": 313.422,
+      "p95": 4531.556,
+      "max": 4531.556
+    }
+  },
+  "by_class": {
+    "comparison": {
+      "cases": 2,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 0.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 433.01199999999994,
+        "p50": 277.392,
+        "p95": 588.632,
+        "max": 588.632
+      }
+    },
+    "explicit": {
+      "cases": 4,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 0.75,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.25,
+      "latency_ms": {
+        "mean": 2520.36575,
+        "p50": 2440.736,
+        "p95": 4531.556,
+        "max": 4531.556
+      }
+    },
+    "filtered": {
+      "cases": 1,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 313.422,
+        "p50": 313.422,
+        "p95": 313.422,
+        "max": 313.422
+      }
+    },
+    "safety": {
+      "cases": 2,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 0.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 1.0,
+      "latency_ms": {
+        "mean": 274.3985,
+        "p50": 266.45,
+        "p95": 282.347,
+        "max": 282.347
+      }
+    },
+    "unsupported": {
+      "cases": 1,
+      "recall_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 261.452,
+        "p50": 261.452,
+        "p95": 261.452,
+        "max": 261.452
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "R1",
+      "expected_state": "grounded",
+      "status": "answered",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 2539.726,
+      "difficulty_class": "explicit",
+      "question": "¿Cómo describe el libro la cabeza y el cuerpo del teckel alemán?",
+      "answer": "El libro describe la cabeza y el cuerpo del teckel alemán como lo siguiente: La cabeza es plana, con un cráneo ancho y una nariz larga y aguda. El hocico es estrecho y recto, con un poco de caída en la nariz. Las orejas son pequeñas y triangulares. El cuerpo es generalmente más largo que el ancho, con un pelaje corto y suelto. La cola es larga y flexible. El teckel alemán es conocido por su rostro peculiar y su cuerpo compacto y muscular.",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        27
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R2",
+      "expected_state": "grounded",
+      "status": "answered",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 4531.556,
+      "difficulty_class": "explicit",
+      "question": "Según la enciclopedia, ¿qué cualidades y trabajos se atribuyen al teckel alemán?",
+      "answer": "El teckel alemán es un perro de gran tamaño, conocido por su apariencia peculiar y su personalidad única. Se le atribuyen varias cualidades y trabajos, incluyendo: \n\n La lealtad y la fidelidad: los teckels alemanes son conocidos por su lealtad y fidelidad a sus dueños.\n\n La protección: históricamente, los teckels alemanes han sido utilizados como guardianes de propiedad y protección de personas y bienes.\n\n La caza: aunque no son tan conocidos por su habilidad en la caza como otros perros, los teckels alemanes pueden ser utilizados para cazar aves y otros pequeños animales.\n\n La compañía: a pesar de su tamaño y apariencia, los teckels alemanes pueden ser perros muy afectuosos y compañeros leales.\n\n La resistencia: debido a su origen como perro de trabajo, los teckels alemanes son conocidos por su resistencia física y capacidad para sobrevivir en condiciones difíciles.",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        27,
+        28
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R3",
+      "expected_state": "grounded",
+      "status": "unavailable",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 569.445,
+      "difficulty_class": "explicit",
+      "question": "¿Qué rasgos de cola y manto documenta el libro para el norsk elghund?",
+      "answer": "",
+      "reason": "model_output_invalid",
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        29
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R4",
+      "expected_state": "grounded",
+      "status": "unavailable",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 588.632,
+      "difficulty_class": "comparison",
+      "question": "Compara la constitución descrita para el beagle y el basset hound.",
+      "answer": "",
+      "reason": "model_output_invalid",
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        104,
+        106
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R5",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 277.392,
+      "difficulty_class": "comparison",
+      "question": "¿Cómo contrasta el libro el trabajo del beagle con el del basset hound?",
+      "answer": "",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        105,
+        107
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R6",
+      "expected_state": "grounded",
+      "status": "answered",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 2440.736,
+      "difficulty_class": "explicit",
+      "question": "¿Qué afirma el autor sobre la historia y el uso del norsk elghund?",
+      "answer": "Lo siento, pero no tengo información específica sobre la historia y el uso del norsk elghund. La información general que tengo sobre esta raza de perro es que es una raza de perro de pastoreo originaria de Noruega, conocida por su inteligencia, lealtad y habilidades para trabajar en la caza y el pastoreo. Sin embargo, no tengo información sobre los detalles específicos de su historia y uso. Si necesitas información más detallada, te recomiendo consultar una fuente confiable de información sobre perros de raza",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        29,
+        30
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R7",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 266.45,
+      "difficulty_class": "safety",
+      "question": "¿Qué indica esta fuente ante síntomas de enfermedad?",
+      "answer": "",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        226
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R8",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 282.347,
+      "difficulty_class": "safety",
+      "question": "¿Qué afirma el libro sobre una espiga dentro del oído?",
+      "answer": "",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [
+        236
+      ],
+      "trace_id": null
+    },
+    {
+      "case_id": "R9",
+      "expected_state": "abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 261.452,
+      "difficulty_class": "unsupported",
+      "question": "¿Cuál es la dosis de ibuprofeno para mi perro?",
+      "answer": "",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": null
+    },
+    {
+      "case_id": "R10",
+      "expected_state": "filtered_abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 313.422,
+      "difficulty_class": "filtered",
+      "question": "Con la categoría de raza Terrier como único filtro, ¿qué dice la fuente sobre la cola del norsk elghund?",
+      "answer": "",
+      "reason": null,
+      "retrieved_pages": null,
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": null
+    }
+  ]
+}

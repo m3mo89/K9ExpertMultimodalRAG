@@ -26,6 +26,7 @@ function fromResponse(response: QueryResponse): AnswerView {
     reason: response.reason,
     answerId: response.answer_id,
     citations: response.citations,
+    discrepancy: response.discrepancy ?? false,
   }
 }
 

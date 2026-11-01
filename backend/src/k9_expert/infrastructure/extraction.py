@@ -6,9 +6,9 @@ import os
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import fitz  # type: ignore[import-untyped]
 
@@ -22,6 +22,10 @@ class TextBlock:
     y0: float
     x1: float
     y1: float
+    # Dominant font of the block, used to recognise typographic headings.
+    font: str = ""
+    bold: bool = False
+    italic: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,10 +115,7 @@ def _page_to_json(page: ExtractedPage) -> dict[str, object]:
         "width": page.width,
         "height": page.height,
         "text": page.text,
-        "blocks": [
-            {"text": block.text, "x0": block.x0, "y0": block.y0, "x1": block.x1, "y1": block.y1}
-            for block in page.blocks
-        ],
+        "blocks": [asdict(block) for block in page.blocks],
         "non_whitespace_characters": page.non_whitespace_characters,
         "token_count": page.token_count,
         "extraction_method": page.extraction_method,
@@ -127,13 +128,16 @@ def _page_from_json(data: dict[str, object]) -> ExtractedPage:
         raise ValueError("invalid_cached_pages")
     blocks = tuple(
         TextBlock(
-            text=str(cast(dict[str, object], block)["text"]),
-            x0=float(str(cast(dict[str, object], block)["x0"])),
-            y0=float(str(cast(dict[str, object], block)["y0"])),
-            x1=float(str(cast(dict[str, object], block)["x1"])),
-            y1=float(str(cast(dict[str, object], block)["y1"])),
+            text=str(block["text"]),
+            x0=float(block["x0"]),
+            y0=float(block["y0"]),
+            x1=float(block["x1"]),
+            y1=float(block["y1"]),
+            font=str(block.get("font", "")),
+            bold=bool(block.get("bold", False)),
+            italic=bool(block.get("italic", False)),
         )
-        for block in raw_blocks
+        for block in cast(list[dict[str, Any]], raw_blocks)
         if isinstance(block, dict)
     )
     return ExtractedPage(
@@ -171,20 +175,16 @@ def _ocr_from_json(data: dict[str, object]) -> OcrResult:
 
 
 class PdfExtractor:
-    version = "pymupdf-direct-v1"
+    version = "pymupdf-direct-v2"
 
     def extract(self, path: Path) -> list[ExtractedPage]:
         document = fitz.open(path)
         try:
             pages: list[ExtractedPage] = []
             for index, page in enumerate(document):
-                raw_blocks = page.get_text("blocks")
+                raw = page.get_text("dict")["blocks"]
                 blocks = tuple(
-                    TextBlock(
-                        text=block[4].strip(), x0=block[0], y0=block[1], x1=block[2], y1=block[3]
-                    )
-                    for block in raw_blocks
-                    if block[4].strip()
+                    block for block in (_text_block(item) for item in raw) if block is not None
                 )
                 text = "\n".join(block.text for block in blocks)
                 compact = " ".join(text.split())
@@ -205,6 +205,27 @@ class PdfExtractor:
 
     def extract_path(self, path: str) -> list[ExtractedPage]:
         return self.extract(Path(path))
+
+
+def _text_block(raw: dict[str, object]) -> TextBlock | None:
+    """Text of one PyMuPDF dict block plus the font covering most of its characters."""
+    if raw.get("type") != 0:
+        return None
+    lines: list[str] = []
+    weight: dict[tuple[str, bool, bool], int] = {}
+    for line in cast(list[dict[str, object]], raw.get("lines", [])):
+        spans = cast(list[dict[str, object]], line.get("spans", []))
+        lines.append("".join(str(span["text"]) for span in spans))
+        for span in spans:
+            font, flags = str(span["font"]), int(cast(int, span["flags"]))
+            key = (font, bool(flags & 16) or "Bold" in font, bool(flags & 2) or "Italic" in font)
+            weight[key] = weight.get(key, 0) + len(str(span["text"]).strip())
+    text = "\n".join(lines).strip()
+    if not text:
+        return None
+    font, bold, italic = max(weight, key=lambda key: weight[key]) if weight else ("", False, False)
+    x0, y0, x1, y1 = cast(tuple[float, float, float, float], raw["bbox"])
+    return TextBlock(text, x0, y0, x1, y1, font, bold, italic)
 
 
 class OcrPolicy:

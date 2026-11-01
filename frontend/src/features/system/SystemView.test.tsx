@@ -23,6 +23,16 @@ describe('SystemView', () => {
         documents: { active: 2 },
         jobs: { available: 2 },
         feedback: { useful: 2, not_useful: 1 },
+        recent: {
+          window_hours: 24,
+          query_states: { grounded: 3, abstained: 1 },
+          abstention_rate: 0.25,
+          latency_ms: { count: 4, p50: 812.4, p95: 2400 },
+          cache: { hits: 2, misses: 2 },
+          generation_calls: 2,
+          ingestion: { jobs_completed: 1, jobs_failed: 0, pages: 243, ocr_pages: 4, fragments: 900, pages_per_minute: 61.5 },
+          errors: {},
+        },
       },
     })
     renderWithApi(<SystemView />, api.client)
@@ -36,5 +46,8 @@ describe('SystemView', () => {
     expect(screen.getByText('Modelos locales')).toBeInTheDocument()
     expect(await screen.findByText('25 %')).toBeInTheDocument()
     expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    expect(screen.getByText('812 ms / 2400 ms')).toBeInTheDocument()
+    expect(screen.getByText('50 %')).toBeInTheDocument()
+    expect(screen.getByText('61.5')).toBeInTheDocument()
   })
 })

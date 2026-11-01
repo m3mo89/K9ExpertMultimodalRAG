@@ -67,6 +67,8 @@ export interface QueryResponse {
   reason: string | null
   citations: CitationSummary[]
   conversation_id: string | null
+  trace_id?: string | null
+  discrepancy?: boolean
 }
 
 export interface ConversationSummary {
@@ -208,12 +210,32 @@ export interface PublicHealth {
   worker_concurrency: number
 }
 
+export interface RecentTraceMetrics {
+  window_hours: number
+  query_states: Record<string, number>
+  abstention_rate: number | null
+  latency_ms: { count: number; p50: number | null; p95: number | null }
+  cache: { hits: number; misses: number }
+  generation_calls: number
+  ingestion: {
+    jobs_completed: number
+    jobs_failed: number
+    pages: number
+    ocr_pages: number
+    fragments: number
+    pages_per_minute: number | null
+  }
+  errors: Record<string, number>
+}
+
 export interface OperationalMetrics {
   generated_at: string
   queries: Record<string, number>
   documents: Record<string, number>
   jobs: Record<string, number>
   feedback: Record<string, number>
+  recent?: RecentTraceMetrics
+  model_availability?: { status: ComponentState; detail: string }
 }
 
 export interface AdminCredentials {

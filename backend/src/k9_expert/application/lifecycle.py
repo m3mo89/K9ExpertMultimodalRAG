@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from k9_expert.application.admin import AdminSecurityService
 from k9_expert.infrastructure.filesystem import ManagedFileStore
 from k9_expert.infrastructure.sqlite import (
     CacheInvalidator,
     DocumentRepository,
+    PrepareIndex,
     SnapshotRepository,
 )
 
@@ -32,6 +34,8 @@ class DocumentLifecycleService:
         retention_days: int = 30,
         file_store: ManagedFileStore | None = None,
         retain_deleted_excerpts: bool = True,
+        prepare_index: PrepareIndex | None = None,
+        indexed_ids: Callable[[str], set[str]] | None = None,
     ) -> None:
         self.snapshots = snapshots
         self.cache = cache
@@ -40,20 +44,38 @@ class DocumentLifecycleService:
         self.retention_days = retention_days
         self.file_store = file_store
         self.retain_deleted_excerpts = retain_deleted_excerpts
+        # Builds the candidate's vector generation before activation commits.
+        self.prepare_index = prepare_index
+        self.indexed_ids = indexed_ids
 
     def deactivate(self, document_id: str) -> str:
         previous, published = self.snapshots.publish_document_membership(
-            uuid4(), document_id, include=False
+            uuid4(), document_id, include=False, prepare_index=self.prepare_index
         )
         self.cache.invalidate_snapshot(previous)
         return published
 
     def reactivate(self, document_id: str) -> str:
         previous, published = self.snapshots.publish_document_membership(
-            uuid4(), document_id, include=True
+            uuid4(), document_id, include=True, prepare_index=self.prepare_index
         )
         self.cache.invalidate_snapshot(previous)
         return published
+
+    def rollback(self, snapshot_id: str) -> str:
+        """Reactivate a retained snapshot whose vector generation is still complete."""
+        snapshot = self.snapshots.snapshot(snapshot_id)
+        if snapshot is None:
+            raise KeyError("snapshot_not_found")
+        if self.indexed_ids is None:
+            raise RuntimeError("rollback_not_configured")
+        if self.indexed_ids(snapshot_id) != set(self.snapshots.membership(snapshot_id)):
+            raise ValueError("snapshot_index_incomplete")
+        previous = self.snapshots.active_membership_snapshot_id()
+        self.snapshots.rollback(UUID(snapshot_id))
+        if previous is not None:
+            self.cache.invalidate_snapshot(previous)
+        return snapshot_id
 
     def delete(
         self, document_id: str, actor_id: str, confirmation: str, resource_version: str
