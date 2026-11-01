@@ -1,0 +1,50 @@
+# Provisional local MVP baseline. Values are configuration defaults, not capacity guarantees.
+# Each index snapshot records the compatible embedding and chunking values.
+
+[server]
+host = "127.0.0.1"
+port = 8000
+allow_lan = false
+
+[worker]
+concurrency = 1
+lease_seconds = 300
+max_retries = 2
+
+[models]
+text_default_alias = "text-default"
+text_default_model = "llama3.2:3b"
+embedding_default_alias = "embedding-default"
+embedding_default_model = "nomic-embed-text:latest"
+embedding_dimensions = 768
+embedding_query_prefix = "search_query: "
+embedding_document_prefix = "search_document: "
+generation_timeout_seconds = 120
+embedding_timeout_seconds = 120
+
+[upload]
+max_file_bytes = 104857600
+max_pages = 1000
+max_query_characters = 2000
+max_feedback_characters = 1000
+
+[extraction]
+extractor_version = "pdfkit-spike-2026-11-01"
+chunking_version = "v1"
+ocr_non_whitespace_character_threshold = 40
+ocr_token_threshold = 8
+ocr_low_text_character_threshold = 160
+ocr_language = "spa"
+ocr_timeout_seconds = 90
+
+[retrieval]
+top_k = 8
+minimum_similarity = 0.0
+max_context_tokens = 6000
+
+[cache]
+exact_response_enabled = true
+
+[retention]
+trace_days = 30
+confirmation_token_seconds = 300

@@ -1,31 +1,31 @@
 ## 1. Technical Spikes and Baselines
 
-- [ ] 1.1 Define a representative Spanish retrieval benchmark from verified pages of the encyclopedia, including explicit, comparison, unsupported, and filtered questions
-- [ ] 1.2 Benchmark candidate local text-generation models and quantizations on the target Mac for structured output, Spanish quality, memory, latency, and citation compliance
-- [ ] 1.3 Benchmark candidate embedding models, dimensions, and query/document prefixes for Recall@K and MRR on the initial dataset
-- [ ] 1.4 Validate the selected vector index for metadata filters, candidate generations, persistence, backup, and local operation
-- [ ] 1.5 Measure direct text extraction quality across text-rich, image-heavy, and complex-layout encyclopedia pages and establish the initial OCR trigger policy
-- [ ] 1.6 Record selected model aliases, resource limits, PDF limits, OCR thresholds, and benchmark evidence in versioned project configuration and documentation
+- [x] 1.1 Define a representative Spanish retrieval benchmark from verified pages of the encyclopedia, including explicit, comparison, unsupported, and filtered questions
+- [x] 1.2 Benchmark candidate local text-generation models and quantizations on the target Mac for structured output, Spanish quality, memory, latency, and citation compliance
+- [x] 1.3 Benchmark candidate embedding models, dimensions, and query/document prefixes for Recall@K and MRR on the initial dataset
+- [x] 1.4 Validate the selected vector index for metadata filters, candidate generations, persistence, backup, and local operation
+- [x] 1.5 Measure direct text extraction quality across text-rich, image-heavy, and complex-layout encyclopedia pages and establish the initial OCR trigger policy
+- [x] 1.6 Record selected model aliases, resource limits, PDF limits, OCR thresholds, and benchmark evidence in versioned project configuration and documentation
 
 ## 2. Project Foundation and Architecture
 
-- [ ] 2.1 Scaffold the Python backend, React TypeScript frontend, automated test suites, formatting, type checking, and local configuration examples
-- [ ] 2.2 Create backend boundaries for domain, application, presentation, ports, and infrastructure without importing concrete infrastructure into domain code
-- [ ] 2.3 Define shared domain identifiers, result states, typed errors, lifecycle enums, and immutable value objects for documents, evidence, queries, and snapshots
-- [ ] 2.4 Define ports for repositories, file storage, vector index, text generation, embeddings, OCR, clock, cache, tracing, and job execution
-- [ ] 2.5 Implement the application composition root for production adapters and test doubles
-- [ ] 2.6 Add an automated architecture test that enforces permitted dependencies and prevents presentation from importing Ollama or index adapters
-- [ ] 2.7 Add local startup commands for the API and single-concurrency worker with loopback-safe defaults
+- [x] 2.1 Scaffold the Python backend, React TypeScript frontend, automated test suites, formatting, type checking, and local configuration examples
+- [x] 2.2 Create backend boundaries for domain, application, presentation, ports, and infrastructure without importing concrete infrastructure into domain code
+- [x] 2.3 Define shared domain identifiers, result states, typed errors, lifecycle enums, and immutable value objects for documents, evidence, queries, and snapshots
+- [x] 2.4 Define ports for repositories, file storage, vector index, text generation, embeddings, OCR, clock, cache, tracing, and job execution
+- [x] 2.5 Implement the application composition root for production adapters and test doubles
+- [x] 2.6 Add an automated architecture test that enforces permitted dependencies and prevents presentation from importing Ollama or index adapters
+- [x] 2.7 Add local startup commands for the API and single-concurrency worker with loopback-safe defaults
 
 ## 3. Authoritative Data and File Storage
 
-- [ ] 3.1 Design and migrate the SQLite schema for documents, immutable versions, pages, fragments, snapshots, index membership, and ingestion jobs
-- [ ] 3.2 Extend the schema for conversations, queries, answers, citation snapshots, feedback, traces, confirmation tokens, and audit events
-- [ ] 3.3 Implement transactional repositories and unit tests for document/version lifecycle and active snapshot lookup
-- [ ] 3.4 Implement transactional repositories and unit tests for persistent job claiming, leases, retries, checkpoints, and worker recovery
+- [x] 3.1 Design and migrate the SQLite schema for documents, immutable versions, pages, fragments, snapshots, index membership, and ingestion jobs
+- [x] 3.2 Extend the schema for conversations, queries, answers, citation snapshots, feedback, traces, confirmation tokens, and audit events
+- [x] 3.3 Implement transactional repositories and unit tests for document/version lifecycle and active snapshot lookup
+- [x] 3.4 Implement transactional repositories and unit tests for persistent job claiming, leases, retries, checkpoints, and worker recovery
 - [ ] 3.5 Implement managed file storage using internal identifiers, atomic moves, content hashes, path traversal protection, and staged cleanup
-- [ ] 3.6 Implement fragment and page repositories that preserve physical pages, printed labels, section paths, extraction provenance, and stable content hashes
-- [ ] 3.7 Implement a schema migration and startup compatibility check that fails safely on unsupported database versions
+- [x] 3.6 Implement fragment and page repositories that preserve physical pages, printed labels, section paths, extraction provenance, and stable content hashes
+- [x] 3.7 Implement a schema migration and startup compatibility check that fails safely on unsupported database versions
 
 ## 4. Secure Upload and Document Registration
 
