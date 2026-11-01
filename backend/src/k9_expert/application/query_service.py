@@ -23,6 +23,7 @@ class SubmitQuery:
 class StoredQueryResult:
     result: QueryResult
     answer_id: str | None
+    citation_ids: tuple[str, ...] = ()
 
 
 class QueryService:
@@ -84,4 +85,6 @@ class QueryService:
             text=result.answer,
             citations=citations,
         )
-        return StoredQueryResult(result, str(answer_id))
+        return StoredQueryResult(
+            result, str(answer_id), tuple(str(citation["id"]) for citation in citations)
+        )

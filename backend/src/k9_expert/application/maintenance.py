@@ -19,9 +19,21 @@ from k9_expert.infrastructure.sqlite import (
     DocumentRepository,
     SqliteDatabase,
     SystemStateRepository,
+    operational_counts,
 )
 
 ComponentState = Literal["ok", "degraded", "unavailable"]
+
+
+class OperationalMetricsService:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def report(self) -> dict[str, object]:
+        return {
+            "generated_at": datetime.now(UTC).isoformat(),
+            **operational_counts(self.database),
+        }
 
 
 class ReindexService:

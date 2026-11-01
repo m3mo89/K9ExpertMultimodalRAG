@@ -97,14 +97,14 @@
 
 ## 10. Responsive Web Application
 
-- [ ] 10.1 Build the typed API client, error handling, application shell, responsive navigation, and accessibility baseline
-- [ ] 10.2 Build the chat workspace with conversation history, source filters, result states, loading, retry, abstention, and feedback controls
-- [ ] 10.3 Build claim and citation components that show document, author, edition, physical/printed page, source state, and evidence inspection
-- [ ] 10.4 Build the knowledge-library view with filters, active-source metadata, version history, processing state, and latest safe error
-- [ ] 10.5 Build administrative upload, replace, reindex, activate, deactivate, and confirmed-delete flows with job progress polling
-- [ ] 10.6 Build the system-health and basic metrics view with clear degraded-component states
-- [ ] 10.7 Add responsive and accessibility tests for desktop, iPhone-sized, and Android-sized viewports
-- [ ] 10.8 Verify through automated browser tests that the frontend communicates only with the application API and never internal model or index endpoints
+- [x] 10.1 Build the typed API client, error handling, application shell, responsive navigation, and accessibility baseline
+- [x] 10.2 Build the chat workspace with conversation history, source filters, result states, loading, retry, abstention, and feedback controls
+- [x] 10.3 Build claim and citation components that show document, author, edition, physical/printed page, source state, and evidence inspection
+- [x] 10.4 Build the knowledge-library view with filters, active-source metadata, version history, processing state, and latest safe error
+- [x] 10.5 Build administrative upload, replace, reindex, activate, deactivate, and confirmed-delete flows with job progress polling
+- [x] 10.6 Build the system-health and basic metrics view with clear degraded-component states
+- [x] 10.7 Add responsive and accessibility tests for desktop, iPhone-sized, and Android-sized viewports
+- [x] 10.8 Verify through automated browser tests that the frontend communicates only with the application API and never internal model or index endpoints
 
 ## 11. Observability and Evaluation
 

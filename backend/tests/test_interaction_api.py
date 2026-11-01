@@ -104,7 +104,11 @@ def test_query_citation_history_withdrawal_and_feedback_errors(tmp_path) -> None
     )
     assert response.status_code == 200
     result = response.json()
+    assert result["conversation_id"] == conversation_id
+    answer = client.get(f"/api/v1/answers/{result['answer_id']}").json()
+    citation_id = answer["citations"][0]["id"]
     assert result["citations"][0] == {
+        "id": citation_id,
         "fragment_id": ids["fragment"],
         "document_id": ids["document"],
         "version_id": ids["version"],
@@ -113,9 +117,8 @@ def test_query_citation_history_withdrawal_and_feedback_errors(tmp_path) -> None
         "edition": "1",
         "physical_page": 7,
         "printed_page_label": "5",
+        "source_status": "active",
     }
-    answer = client.get(f"/api/v1/answers/{result['answer_id']}").json()
-    citation_id = answer["citations"][0]["id"]
     assert client.get(
         f"/api/v1/citations/{citation_id}/page", params={"physical_page": 7}
     ).json()["extracted_text"] == "texto de página"
@@ -150,3 +153,54 @@ def test_common_validation_error_envelope(tmp_path) -> None:
     assert response.status_code == 422
     assert response.json()["code"] == "request_validation_failed"
     assert response.json()["retryable"] is False
+
+
+def test_conversation_listing_history_citations_and_current_source_state(tmp_path) -> None:
+    client, database, ids = seeded_client(tmp_path)
+    conversation_id = client.post("/api/v1/conversations").json()["id"]
+    client.post(
+        "/api/v1/queries",
+        json={"text": "¿Qué dice del perro?", "conversation_id": conversation_id},
+    )
+    listed = client.get("/api/v1/conversations").json()
+    assert listed[0]["id"] == conversation_id
+    assert listed[0]["title"] == "¿Qué dice del perro?"
+    with database.transaction() as connection:
+        connection.execute(
+            "UPDATE documents SET status = 'deleted' WHERE id = ?", (ids["document"],)
+        )
+    message = client.get(f"/api/v1/conversations/{conversation_id}").json()["messages"][0]
+    citation = message["citations"][0]
+    assert citation["source_status"] == "active"
+    assert citation["current_source_status"] == "deleted"
+    assert citation["physical_page"] == 7
+
+
+def test_library_contracts_expose_edition_resource_version_and_safe_job_state(tmp_path) -> None:
+    client, database, ids = seeded_client(tmp_path)
+    document = client.get("/api/v1/documents").json()[0]
+    assert document["edition"] == "1"
+    assert document["updated_at"] == "2026-11-01T00:00:00+00:00"
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO ingestion_jobs (id, version_id, stage, attempt, checkpoint, error_code, "
+            "error_message, created_at, updated_at) VALUES (?, ?, 'error', 2, 'extracting', "
+            "'ingestion_failed', 'Traceback: /secret/path', ?, ?)",
+            (str(uuid4()), ids["version"], "2026-11-02T00:00:00Z", "2026-11-02T00:00:00Z"),
+        )
+    version = client.get(f"/api/v1/documents/{ids['document']}/versions").json()[0]
+    assert version["job_stage"] == "error"
+    assert version["failed_stage"] == "extracting"
+    assert version["error_code"] == "ingestion_failed"
+    assert "Traceback" not in str(version)
+
+
+def test_admin_metrics_require_authorization_and_count_states(tmp_path) -> None:
+    client, _, _ = seeded_client(tmp_path)
+    client.post("/api/v1/queries", json={"text": "¿Qué dice del perro?"})
+    assert client.get("/api/v1/admin/metrics").status_code == 401
+    metrics = client.get(
+        "/api/v1/admin/metrics", headers={"X-K9-Admin-Secret": "secret"}
+    ).json()
+    assert metrics["queries"] == {"grounded": 1}
+    assert metrics["documents"] == {"active": 1}

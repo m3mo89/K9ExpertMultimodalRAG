@@ -1,4 +1,4 @@
-.PHONY: api worker test lint typecheck web-check
+.PHONY: api worker test lint typecheck web-check web-test web-e2e
 
 api:
 	.venv/bin/uvicorn k9_expert.presentation.api:app --host 127.0.0.1 --port 8000 --reload
@@ -17,3 +17,9 @@ typecheck:
 
 web-check:
 	npm --prefix frontend run lint && npm --prefix frontend run build
+
+web-test:
+	npm --prefix frontend test
+
+web-e2e:
+	npm --prefix frontend run test:e2e

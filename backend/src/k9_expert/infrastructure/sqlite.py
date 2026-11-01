@@ -265,7 +265,10 @@ class DocumentRepository:
         with self.database.connect() as connection:
             return list(
                 connection.execute(
-                    "SELECT id, title, author, category, status, active_version_id FROM documents ORDER BY created_at"
+                    """SELECT d.id, d.title, d.author, d.category, d.status, d.active_version_id,
+                    v.edition, d.updated_at FROM documents d
+                    LEFT JOIN document_versions v ON v.id = d.active_version_id
+                    ORDER BY d.created_at"""
                 )
             )
 
@@ -273,7 +276,16 @@ class DocumentRepository:
         with self.database.connect() as connection:
             return list(
                 connection.execute(
-                    "SELECT id, content_hash, source_filename, edition, status, created_at FROM document_versions WHERE document_id = ? ORDER BY created_at DESC",
+                    # Only the stable error code is exposed; error_message may hold raw exception text.
+                    """SELECT v.id, v.content_hash, v.source_filename, v.edition, v.status, v.created_at,
+                    j.id AS job_id, j.stage AS job_stage, j.attempt AS job_attempt,
+                    CASE WHEN j.stage = 'error' THEN j.checkpoint END AS failed_stage,
+                    j.error_code, j.updated_at AS job_updated_at
+                    FROM document_versions v
+                    LEFT JOIN ingestion_jobs j ON j.id = (
+                      SELECT id FROM ingestion_jobs WHERE version_id = v.id
+                      ORDER BY created_at DESC LIMIT 1)
+                    WHERE v.document_id = ? ORDER BY v.created_at DESC""",
                     (document_id,),
                 )
             )
@@ -769,6 +781,18 @@ class InteractionRepository:
             ).fetchone()
         return None if row is None else cast(sqlite3.Row, row)
 
+    def list_conversations(self, limit: int = 50) -> list[sqlite3.Row]:
+        with self.database.connect() as connection:
+            return list(
+                connection.execute(
+                    """SELECT c.id, c.created_at, c.updated_at,
+                    (SELECT q.question_redacted FROM queries q WHERE q.conversation_id = c.id
+                     ORDER BY q.created_at LIMIT 1) AS title
+                    FROM conversations c ORDER BY c.updated_at DESC LIMIT ?""",
+                    (limit,),
+                )
+            )
+
     def save_answer(
         self,
         *,
@@ -841,7 +865,12 @@ class InteractionRepository:
         with self.database.connect() as connection:
             return list(
                 connection.execute(
-                    "SELECT * FROM citation_snapshots WHERE answer_id = ? ORDER BY physical_page, id",
+                    """SELECT c.*, COALESCE(d.status, 'withdrawn') AS current_source_status
+                    FROM citation_snapshots c
+                    LEFT JOIN fragments f ON f.id = c.fragment_id
+                    LEFT JOIN document_versions v ON v.id = f.version_id
+                    LEFT JOIN documents d ON d.id = v.document_id
+                    WHERE c.answer_id = ? ORDER BY c.physical_page, c.id""",
                     (answer_id,),
                 )
             )
@@ -967,6 +996,22 @@ class SecurityRepository:
     def audit_events(self) -> list[sqlite3.Row]:
         with self.database.connect() as connection:
             return list(connection.execute("SELECT * FROM audit_events ORDER BY created_at, id"))
+
+
+def operational_counts(database: SqliteDatabase) -> dict[str, dict[str, int]]:
+    """Aggregate counts by state; the basic operational view before full trace metrics."""
+    queries = {
+        "queries": "SELECT status AS key, COUNT(*) AS count FROM queries GROUP BY status",
+        "documents": "SELECT status AS key, COUNT(*) AS count FROM documents GROUP BY status",
+        "jobs": "SELECT stage AS key, COUNT(*) AS count FROM ingestion_jobs GROUP BY stage",
+        "feedback": """SELECT CASE useful WHEN 1 THEN 'useful' ELSE 'not_useful' END AS key,
+            COUNT(*) AS count FROM feedback GROUP BY useful""",
+    }
+    with database.connect() as connection:
+        return {
+            name: {str(row["key"]): int(row["count"]) for row in connection.execute(sql)}
+            for name, sql in queries.items()
+        }
 
 
 def reconciliation_report(database: SqliteDatabase, indexed_fragment_ids: set[str]) -> dict[str, list[str]]:

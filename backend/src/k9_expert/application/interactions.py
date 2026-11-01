@@ -20,15 +20,23 @@ class InteractionService:
     def create_conversation(self) -> dict[str, object]:
         return dict(self.repository.create_conversation(uuid4()))
 
+    def conversations(self, limit: int = 50) -> list[dict[str, object]]:
+        return [dict(row) for row in self.repository.list_conversations(limit)]
+
     def conversation(self, conversation_id: str) -> dict[str, object]:
         conversation = self.repository.conversation(conversation_id)
         if conversation is None:
             raise KeyError("conversation_not_found")
         result = dict(conversation)
-        result["messages"] = [
-            dict(row)
-            for row in self.repository.conversation_history(conversation_id, self.history_limit)
-        ]
+        messages = []
+        for row in self.repository.conversation_history(conversation_id, self.history_limit):
+            message = dict(row)
+            message["citations"] = [
+                dict(citation)
+                for citation in self.repository.citations_for_answer(str(row["answer_id"]))
+            ]
+            messages.append(message)
+        result["messages"] = messages
         return result
 
     def answer(self, answer_id: str) -> dict[str, object]:

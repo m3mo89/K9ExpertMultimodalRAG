@@ -49,6 +49,8 @@ class DocumentResponse(BaseModel):
     category: str | None
     status: str
     active_version_id: str | None
+    edition: str | None
+    updated_at: str
 
 
 class JobResponse(BaseModel):
@@ -66,6 +68,19 @@ class VersionResponse(BaseModel):
     edition: str | None
     status: str
     created_at: str
+    job_id: str | None
+    job_stage: str | None
+    job_attempt: int | None
+    failed_stage: str | None
+    error_code: str | None
+    job_updated_at: str | None
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str | None
+    created_at: str
+    updated_at: str
 
 
 class ConversationResponse(BaseModel):
@@ -109,6 +124,7 @@ class QueryResponse(BaseModel):
     snapshot_id: str | None
     reason: str | None
     citations: list[dict[str, object]]
+    conversation_id: str | None = None
 
 
 class ErrorEnvelope(BaseModel):
@@ -324,6 +340,10 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     def diagnostics() -> dict[str, object]:
         return resolved.health_service.report()
 
+    @app.get("/api/v1/admin/metrics", dependencies=[Depends(require_admin)])
+    def metrics() -> dict[str, object]:
+        return resolved.metrics_service.report()
+
     @app.get("/api/v1/admin/backups", dependencies=[Depends(require_admin)])
     def list_backups() -> list[dict[str, object]]:
         return resolved.backup_service.list()
@@ -379,6 +399,9 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
         except KeyError as error:
             raise HTTPException(status_code=404, detail=str(error.args[0])) from error
         result = stored.result
+        citation_ids: list[str | None] = list(stored.citation_ids) or [None] * len(
+            result.citations
+        )
         return QueryResponse(
             query_id=str(result.query_id),
             answer_id=stored.answer_id,
@@ -386,8 +409,10 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             answer=result.answer,
             snapshot_id=str(result.snapshot_id) if result.snapshot_id else None,
             reason=result.reason,
+            conversation_id=str(request.conversation_id) if request.conversation_id else None,
             citations=[
                 {
+                    "id": citation_id,
                     "fragment_id": str(citation.evidence_id),
                     "document_id": str(citation.source.document_id),
                     "version_id": str(citation.source.version_id),
@@ -396,8 +421,9 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
                     "edition": citation.source.edition,
                     "physical_page": citation.source.physical_page,
                     "printed_page_label": citation.source.printed_page_label,
+                    "source_status": "active",
                 }
-                for citation in result.citations
+                for citation_id, citation in zip(citation_ids, result.citations, strict=True)
             ],
         )
 
@@ -424,6 +450,13 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     def list_versions(document_id: str) -> list[VersionResponse]:
         versions = resolved.document_service.versions(document_id)
         return [VersionResponse(**dict(row)) for row in versions]
+
+    @app.get("/api/v1/conversations", response_model=list[ConversationSummary])
+    def list_conversations() -> list[ConversationSummary]:
+        return [
+            ConversationSummary.model_validate(row)
+            for row in resolved.interaction_service.conversations()
+        ]
 
     @app.post("/api/v1/conversations", response_model=ConversationResponse, status_code=201)
     def create_conversation() -> ConversationResponse:

@@ -17,6 +17,7 @@ from k9_expert.application.maintenance import (
     ComponentHealth,
     HealthService,
     OllamaModelProbe,
+    OperationalMetricsService,
     ReindexService,
 )
 from k9_expert.application.query import QueryOrchestrator
@@ -74,6 +75,7 @@ class ApplicationContainer:
     lifecycle_service: DocumentLifecycleService
     reindex_service: ReindexService
     health_service: HealthService
+    metrics_service: OperationalMetricsService
     backup_service: BackupService
     restore_service: RestoreService
     ingestion_worker: IngestionWorker
@@ -141,6 +143,7 @@ def compose(
             model_probe
             or OllamaModelProbe((resolved.text_model, resolved.embedding_model)),
         ),
+        metrics_service=OperationalMetricsService(database),
         backup_service=BackupService(
             database,
             resolved.files_dir,
