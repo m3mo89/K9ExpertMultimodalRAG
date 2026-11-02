@@ -43,7 +43,7 @@ def client(tmp_path) -> TestClient:  # type: ignore[no-untyped-def]
     )
     service = BreedAnalysisService(
         DocumentRepository(database), lambda _request: [item],
-        lambda _snapshot, _limit: ["Teckel alemán"], BreedAnalysisRepository(database),
+        lambda _snapshot, _profile, _limit: ["Teckel alemán"], BreedAnalysisRepository(database),
         DeterministicBreedMatcher(),
     )
     return TestClient(create_app(replace(container, breed_analysis_service=service)))

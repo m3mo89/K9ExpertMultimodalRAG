@@ -36,12 +36,15 @@ from k9_expert.infrastructure.sqlite import BreedAnalysisRepository, DocumentRep
 from k9_expert.ports.interfaces import TraceSink
 
 Retrieve = Callable[[QueryRequest], list[Evidence]]
-DiscoverBreeds = Callable[[str, int], list[str]]
+# (snapshot_id, profile, pool size) -> candidate breeds when the request names none.
+DiscoverBreeds = Callable[[str, BreedAnalysisProfile, int], list[str]]
+Search = Callable[[QueryRequest, int], list[tuple[str, float]]]
+FragmentBreeds = Callable[[str, list[str]], dict[str, str]]
 Reformulate = Callable[[str, list[Evidence]], str]
 
 NARRATIVE_PROMPT_VERSION = "breed-narrative-v1"
-# Breeds evaluated when the user names none; the reference vocabulary has 13.
-DISCOVERY_POOL = 20
+# Fragments searched per criterion to rank breeds for the discovery pool.
+DISCOVERY_SEARCH_LIMIT = 96
 # Spanish retrieval terms per criterion key; the corpus headings use these words.
 CRITERION_QUERY_TERMS = {
     "hunting_function": "función de caza",
@@ -56,6 +59,44 @@ NARRATIVE_UNAVAILABLE = (
 NARRATIVE_REJECTED = (
     "Narrativa descartada por citas no verificables; se muestran sólo los hallazgos."
 )
+
+
+class EvidenceBreedDiscovery:
+    """Candidate pool from evidence, not from a list: the breeds of the fragments that best
+    match each criterion, ranked by the sum over criteria of their best fragment score."""
+
+    def __init__(
+        self, search: Search, fragment_breeds: FragmentBreeds,
+        search_limit: int = DISCOVERY_SEARCH_LIMIT,
+    ) -> None:
+        self.search, self.fragment_breeds = search, fragment_breeds
+        self.search_limit = search_limit
+
+    def __call__(self, snapshot: str, profile: BreedAnalysisProfile, pool: int) -> list[str]:
+        totals: dict[str, float] = {}
+        for criterion in profile.criteria:
+            label = CRITERION_QUERY_TERMS.get(criterion.key, criterion.key)
+            request = QueryRequest(
+                f"{label} {criterion.value}",
+                QueryFilters(document_ids=profile.document_ids), snapshot,
+            )
+            hits = self.search(request, self.search_limit)
+            breeds = self.fragment_breeds(snapshot, [fragment for fragment, _ in hits])
+            best: dict[str, float] = {}
+            for fragment, score in hits:
+                breed = breeds.get(fragment)
+                if breed is not None:
+                    best[breed] = max(score, best.get(breed, score))
+            for breed, score in best.items():
+                totals[breed] = totals.get(breed, 0.0) + score
+        ranked = sorted(totals, key=lambda breed: (-totals[breed], breed))
+        return ranked[:pool]
+
+
+class BreedNames(Protocol):
+    def names(self) -> list[str]: ...
+
+    def resolve(self, name: str) -> str | None: ...
 
 
 class NarrativeGateway(Protocol):
@@ -90,8 +131,12 @@ class BreedAnalysisService:
         sufficiency: EvidenceSufficiencyPolicy | None = None,
         reformulate: Reformulate | None = None,
         agent_max_iterations: int = 2,
+        registry: BreedNames | None = None,
+        discovery_pool: int = 20,
     ) -> None:
         self.documents, self.retrieve = documents, retrieve
+        # Without a registry, named candidates are used as given (tests and evaluation).
+        self.registry, self.discovery_pool = registry, discovery_pool
         self.discover_breeds, self.repository = discover_breeds, repository
         self.matcher, self.sink, self.max_candidates = matcher, sink, max_candidates
         self.cache, self.gateway = cache, gateway
@@ -155,12 +200,27 @@ class BreedAnalysisService:
                 source.summary,
             ))
 
-        # Without explicit breeds, every documented breed is evaluated against the criteria and
-        # the best-supported ones are reported (evidence-driven discovery, not a fixed list).
-        discovering = not profile.candidate_breeds
+        named = list(profile.candidate_breeds)[: self.max_candidates]
+        if self.registry is not None and named:
+            resolved = [self.registry.resolve(name) for name in named]
+            if None in resolved:
+                trace.set(unknown_breeds=[
+                    name for name, found in zip(named, resolved, strict=True) if found is None
+                ])
+                return finish(BreedAnalysisReport(
+                    analysis_id, AnalysisStatus.REJECTED, profile, bound,
+                    trace_id=trace.trace_id, reason="breed_not_found",
+                    execution=ExecutionMetadata(input_guardrail=_outcome(decision)),
+                ))
+            named = list(dict.fromkeys(name for name in resolved if name is not None))
+        # Without explicit breeds, the pool comes from the evidence that best matches the
+        # criteria across the whole registry, and the best-supported breeds are reported.
+        discovering = not named
+        if discovering and self.registry is not None:
+            trace.set(registry_size=len(self.registry.names()))
         breeds = (
-            self.discover_breeds(snapshot, DISCOVERY_POOL)
-            if discovering else list(profile.candidate_breeds)[: self.max_candidates]
+            self.discover_breeds(snapshot, profile, self.discovery_pool)
+            if discovering else named
         )
         if not breeds:
             return finish(BreedAnalysisReport(

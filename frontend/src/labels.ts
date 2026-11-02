@@ -97,6 +97,7 @@ const errorMessages: Record<string, string> = {
   page_outside_citation_range: 'La página está fuera del rango citado.',
   feedback_comment_too_long: 'El comentario supera la longitud permitida.',
   answer_not_found: 'La respuesta no existe.',
+  breed_not_found: 'Una de las razas indicadas no está en la biblioteca activa.',
   invalid_pdf_filename: 'El archivo debe tener extensión .pdf.',
   invalid_pdf_signature: 'El archivo no es un PDF válido.',
   invalid_pdf_integrity: 'El PDF está dañado.',
@@ -128,6 +129,7 @@ const reasonMessages: Record<string, string> = {
   criterion_not_supported: 'Uno de los criterios no está admitido.',
   criterion_invalid: 'Uno de los criterios no es válido.',
   no_candidates: 'La biblioteca activa no documenta razas candidatas.',
+  breed_not_found: 'Una de las razas indicadas no está en la biblioteca activa.',
   citation_not_allowed: 'Un hallazgo cita evidencia no verificable.',
   citation_required: 'Un hallazgo carece de cita.',
 }

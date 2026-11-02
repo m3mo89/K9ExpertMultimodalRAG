@@ -13,7 +13,11 @@ from types import TracebackType
 from typing import Literal, NamedTuple, cast
 from uuid import UUID, uuid4
 
-from k9_expert.domain.breed_vocabulary import BreedClassification, validate_classification
+from k9_expert.domain.breed_vocabulary import (
+    BreedClassification,
+    DocumentBreeds,
+    validate_classification,
+)
 from k9_expert.domain.models import (
     AnalysisFeedback,
     AnalysisStatus,
@@ -39,7 +43,7 @@ from k9_expert.domain.models import (
 )
 from k9_expert.domain.telemetry import redact
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 CLEANUP_QUEUE_TABLE = """
 CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
@@ -107,6 +111,16 @@ CREATE TABLE IF NOT EXISTS fragment_classification (
 );
 """
 
+# Each version's breed discovery result, kept for auditing which signals made a breed.
+BREED_DISCOVERY_TABLE = """
+CREATE TABLE IF NOT EXISTS breed_discovery (
+  version_id TEXT NOT NULL REFERENCES document_versions(id) ON DELETE CASCADE,
+  heading_path TEXT NOT NULL, breed TEXT NOT NULL, breed_group TEXT,
+  hunting_functions_json TEXT NOT NULL DEFAULT '[]', signals_json TEXT NOT NULL,
+  policy_version TEXT NOT NULL, PRIMARY KEY(version_id, heading_path)
+);
+"""
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, author TEXT, category TEXT, status TEXT NOT NULL,
@@ -159,7 +173,7 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
 """ + CLEANUP_QUEUE_TABLE + REINDEX_TABLES + BREED_MATCH_TABLES + FRAGMENT_CLASSIFICATION_TABLE
-SCHEMA += BREED_ANALYSIS_SUMMARY_COLUMN
+SCHEMA += BREED_ANALYSIS_SUMMARY_COLUMN + BREED_DISCOVERY_TABLE
 
 
 INDEX_FRAGMENTS_SQL = """SELECT f.id, f.text, f.content_hash, f.version_id, f.page_start,
@@ -257,6 +271,12 @@ class SqliteDatabase:
                 if "summary" not in columns:
                     connection.executescript(BREED_ANALYSIS_SUMMARY_COLUMN)
                 connection.execute("PRAGMA user_version = 6")
+                current = 6
+            # Fragments classified under k9-reference-v1 are not reclassified: reset the
+            # database and reingest (pre-release, no data migration).
+            if current == 6:
+                connection.executescript(BREED_DISCOVERY_TABLE)
+                connection.execute("PRAGMA user_version = 7")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -699,6 +719,23 @@ class ContentRepository:
                 (version_id,),
             )
             connection.execute("DELETE FROM pages WHERE version_id = ?", (version_id,))
+            connection.execute("DELETE FROM breed_discovery WHERE version_id = ?", (version_id,))
+
+    def add_breed_discovery(self, version_id: UUID, discovered: DocumentBreeds) -> None:
+        with self.database.transaction() as connection:
+            connection.executemany(
+                """INSERT OR REPLACE INTO breed_discovery (version_id, heading_path, breed,
+                breed_group, hunting_functions_json, signals_json, policy_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (
+                        str(version_id), "/".join(entry.path), entry.name, entry.group,
+                        json.dumps(entry.hunting_functions), json.dumps(entry.signals),
+                        discovered.policy_version,
+                    )
+                    for entry in discovered.breeds.values()
+                ],
+            )
 
     def add_fragment(
         self,
@@ -886,16 +923,33 @@ class SnapshotRepository:
                 (snapshot_id, breed),
             ).fetchall()
 
-    def classified_breeds(self, snapshot_id: str, limit: int = 20) -> list[str]:
+    def breed_registry(self, snapshot_id: str) -> list[sqlite3.Row]:
+        """The snapshot's breeds: every breed classified on a member fragment, with its group
+        and fragment count. It changes only when snapshot membership does."""
         with self.database.connect() as connection:
-            rows = connection.execute(
-                """SELECT c.breed, COUNT(*) AS fragments FROM snapshot_membership m
+            return connection.execute(
+                """SELECT c.breed, MIN(c.breed_group) AS breed_group, COUNT(*) AS fragments
+                FROM snapshot_membership m
                 JOIN fragment_classification c ON c.fragment_id = m.fragment_id
                 WHERE m.snapshot_id = ? AND c.breed IS NOT NULL
-                GROUP BY c.breed ORDER BY fragments DESC, c.breed LIMIT ?""",
-                (snapshot_id, limit),
+                GROUP BY c.breed ORDER BY c.breed""",
+                (snapshot_id,),
             ).fetchall()
-        return [str(row["breed"]) for row in rows]
+
+    def fragment_breeds(self, snapshot_id: str, fragment_ids: list[str]) -> dict[str, str]:
+        """Breed of each classified member fragment among `fragment_ids`."""
+        if not fragment_ids:
+            return {}
+        marks = ",".join("?" for _ in fragment_ids)
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                f"""SELECT c.fragment_id, c.breed FROM snapshot_membership m
+                JOIN fragment_classification c ON c.fragment_id = m.fragment_id
+                WHERE m.snapshot_id = ? AND c.breed IS NOT NULL
+                AND c.fragment_id IN ({marks})""",
+                (snapshot_id, *fragment_ids),
+            ).fetchall()
+        return {str(row["fragment_id"]): str(row["breed"]) for row in rows}
 
     def snapshot(self, snapshot_id: str) -> sqlite3.Row | None:
         with self.database.connect() as connection:

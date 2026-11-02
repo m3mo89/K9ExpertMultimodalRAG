@@ -4,6 +4,7 @@ import type {
   BreedAnalysisRequest,
   BreedAnalysisResponse,
   BreedProfile,
+  BreedSummary,
   CitationDetail,
   Confirmation,
   Conversation,
@@ -135,6 +136,7 @@ export class ApiClient {
       method: 'POST',
       body: { useful, comment },
     })
+  listBreeds = () => this.request<BreedSummary[]>('/breeds')
   breedProfile = (breed: string) =>
     this.request<BreedProfile>(`/breeds/${encodeURIComponent(breed)}/profile`)
   configuration = () => this.request<ModelConfiguration>('/configuration')

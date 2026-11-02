@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
 import fitz  # type: ignore[import-untyped]
 
-from k9_expert.domain.breed_vocabulary import breed_for_caption
+from k9_expert.domain.breed_vocabulary import caption_breed
 
 # A caption starts at most this many points below its photo.
 CAPTION_GAP = 40
@@ -22,17 +23,26 @@ class BreedPhoto:
 
 
 class PdfBreedImages:
-    """Indexes each PDF once per process; rendered photos are cached on disk as PNG."""
+    """Indexes each PDF's captioned photos once per process; rendered photos are cached on disk
+    as PNG. Captions are matched against the breed registry at lookup, so breeds discovered
+    later need no rescan."""
 
     def __init__(self, cache_root: Path, dpi: int = 96) -> None:
         self.cache_root = cache_root
         self.dpi = dpi
-        self._index: dict[str, dict[str, BreedPhoto]] = {}
+        self._index: dict[str, list[BreedPhoto]] = {}
 
-    def find(self, pdf_path: str, breed: str) -> BreedPhoto | None:
+    def find(self, pdf_path: str, breed: str, breeds: Iterable[str]) -> BreedPhoto | None:
+        """First photo, in page order, whose caption names `breed` rather than a longer
+        registered name (a "Basset hound" caption is not a photo of "Basset")."""
         if pdf_path not in self._index:
             self._index[pdf_path] = self._scan(pdf_path)
-        return self._index[pdf_path].get(breed)
+        names = {*breeds, breed}
+        return next(
+            (photo for photo in self._index[pdf_path]
+             if caption_breed(photo.caption, names) == breed),
+            None,
+        )
 
     def render(self, pdf_path: str, photo: BreedPhoto) -> bytes:
         key = hashlib.sha256(f"{pdf_path}:{photo.page}:{photo.bbox}:{self.dpi}".encode())
@@ -49,9 +59,9 @@ class PdfBreedImages:
         return data
 
     @staticmethod
-    def _scan(pdf_path: str) -> dict[str, BreedPhoto]:
-        """First captioned photo of each breed in page order."""
-        found: dict[str, BreedPhoto] = {}
+    def _scan(pdf_path: str) -> list[BreedPhoto]:
+        """Every photo with a caption printed just below it, in page order."""
+        found: list[BreedPhoto] = []
         with fitz.open(pdf_path) as document:
             for number, page in enumerate(document, start=1):
                 images = page.get_image_info()
@@ -64,10 +74,7 @@ class PdfBreedImages:
                         (block for block in blocks if y1 - 2 <= block[1] <= y1 + CAPTION_GAP),
                         key=lambda block: block[1],
                     )
-                    if not below:
-                        continue
-                    caption = " ".join(str(below[0][4]).split())
-                    breed = breed_for_caption(caption)
-                    if breed is not None and breed not in found:
-                        found[breed] = BreedPhoto(number, caption, (x0, y0, x1, y1))
+                    if below:
+                        caption = " ".join(str(below[0][4]).split())
+                        found.append(BreedPhoto(number, caption, (x0, y0, x1, y1)))
         return found

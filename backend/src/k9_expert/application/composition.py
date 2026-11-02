@@ -12,9 +12,10 @@ import httpx
 
 from k9_expert.application.admin import AdminSecurityService
 from k9_expert.application.agent import DomainPreservingReformulator
-from k9_expert.application.breed_analysis import BreedAnalysisService
+from k9_expert.application.breed_analysis import BreedAnalysisService, EvidenceBreedDiscovery
 from k9_expert.application.breed_match import DeterministicBreedMatcher
 from k9_expert.application.breed_profile import BreedProfileService
+from k9_expert.application.breed_registry import BreedRegistry
 from k9_expert.application.documents import DocumentRegistrationService, PdfValidator
 from k9_expert.application.generation import (
     PROMPT_VERSION,
@@ -111,6 +112,7 @@ class ApplicationSettings:
     breed_match_policy_version: str = "breed-match-v1"
     breed_match_minimum_coverage: float = 0.5
     breed_match_max_candidates: int = 5
+    breed_match_discovery_pool: int = 20
 
     @property
     def files_dir(self) -> Path:
@@ -143,6 +145,7 @@ class ApplicationContainer:
     system_state: SystemStateRepository
     breed_analysis_service: BreedAnalysisService
     breed_profile_service: BreedProfileService
+    breed_registry: BreedRegistry
 
 
 # TOML key -> settings field. The admin secret is deliberately not read from files.
@@ -181,6 +184,7 @@ _TOML_FIELDS = {
     ("breed_match", "policy_version"): "breed_match_policy_version",
     ("breed_match", "minimum_coverage"): "breed_match_minimum_coverage",
     ("breed_match", "max_candidates"): "breed_match_max_candidates",
+    ("breed_match", "discovery_pool"): "breed_match_discovery_pool",
 }
 
 
@@ -362,10 +366,11 @@ def compose(
         resolved.text_fallback_model,
         resolved.embedding_model,
     ))))
+    breed_registry = BreedRegistry(documents, snapshots)
     breed_analysis_service = BreedAnalysisService(
         documents,
         retriever,
-        snapshots.classified_breeds,
+        EvidenceBreedDiscovery(retriever.search, snapshots.fragment_breeds),
         analysis_repository,
         DeterministicBreedMatcher(resolved.breed_match_minimum_coverage),
         sink=traces,
@@ -387,6 +392,8 @@ def compose(
         sufficiency=EvidenceSufficiencyPolicy(resolved.sufficiency_minimum_score),
         reformulate=DomainPreservingReformulator(),
         agent_max_iterations=resolved.agent_max_iterations,
+        registry=breed_registry,
+        discovery_pool=resolved.breed_match_discovery_pool,
     )
     return ApplicationContainer(
         settings=resolved,
@@ -449,8 +456,10 @@ def compose(
         system_state=state,
         breed_analysis_service=breed_analysis_service,
         breed_profile_service=BreedProfileService(
-            documents, snapshots, PdfBreedImages(resolved.data_dir / "cache" / "breed-images")
+            documents, snapshots, PdfBreedImages(resolved.data_dir / "cache" / "breed-images"),
+            breed_registry,
         ),
+        breed_registry=breed_registry,
     )
 
 

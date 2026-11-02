@@ -7,6 +7,7 @@ import type {
   CriterionKey,
   FindingOutcome,
 } from '../../api/types'
+import { BreedSuggestions } from '../../components/BreedSuggestions'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAsync } from '../../hooks'
@@ -23,7 +24,7 @@ import { BreedProfileDialog } from './BreedProfileDialog'
 
 export const MAX_CRITERIA = 12
 
-/** Hunting functions of the controlled corpus vocabulary (k9-reference-v1). */
+/** Closed set of hunting functions; breeds and groups are discovered from the library. */
 export const HUNTING_FUNCTIONS = ['rastro', 'muestra', 'cobro', 'busca', 'terrier', 'agua']
 
 /**
@@ -73,6 +74,7 @@ function matchedWeight(candidate: BreedCandidate, criteria: BreedCriterion[]): n
 export function BreedMatchView() {
   const api = useApi()
   const breedsId = useId()
+  const breedListId = useId()
   // Selected choices in click order; the value is the criterion sent to the API.
   const [selected, setSelected] = useState<BreedCriterion[]>([
     { key: 'hunting_function', value: 'rastro', weight: 1 },
@@ -187,10 +189,12 @@ export function BreedMatchView() {
           <input
             id={breedsId}
             type="text"
+            list={breedListId}
             value={breeds}
             placeholder="p. ej. Pointer, Setter inglés"
             onChange={(event) => setBreeds(event.target.value)}
           />
+          <BreedSuggestions id={breedListId} />
         </details>
         <div className="button-row">
           <button

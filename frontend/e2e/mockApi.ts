@@ -28,6 +28,10 @@ const citation = {
 const routes: Record<string, unknown> = {
   'GET /health': { status: 'ok', worker_concurrency: 1 },
   'GET /configuration': configurationFixture,
+  'GET /breeds': [
+    { name: 'Basset hound', group: 'Sabuesos de talla pequeña', fragment_count: 6 },
+    { name: 'Teckel alemán', group: null, fragment_count: 9 },
+  ],
   'GET /breeds/Teckel%20alem%C3%A1n/profile': profileFixture,
   'POST /breed-analyses': analysisFixture,
   'POST /breed-analyses/an-1/feedback': {

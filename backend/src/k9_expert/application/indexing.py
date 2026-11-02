@@ -89,14 +89,19 @@ class SnapshotRetriever:
         self.selector = selector
         self.candidates = candidates
 
-    def __call__(self, request: QueryRequest) -> list[Evidence]:
+    def search(self, request: QueryRequest, limit: int) -> list[tuple[str, float]]:
+        """Raw (fragment_id, score) hits, before context selection."""
         if request.snapshot_id is None:
             return []
         index = ChromaGenerationIndex(self.index_root, request.snapshot_id)
-        hits = index.search(
-            self.embed_query(request.text), self.candidates, metadata_filter(request.filters)
+        return list(
+            index.search(self.embed_query(request.text), limit, metadata_filter(request.filters))
         )
-        scores = dict(hits)
+
+    def __call__(self, request: QueryRequest) -> list[Evidence]:
+        if request.snapshot_id is None:
+            return []
+        scores = dict(self.search(request, self.candidates))
         rows = self.snapshots.evidence_rows(request.snapshot_id, list(scores))
         evidence = [_evidence(row, scores[str(row["id"])]) for row in rows]
         return self.selector.select(evidence, request.filters)

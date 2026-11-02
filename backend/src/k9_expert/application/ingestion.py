@@ -8,6 +8,11 @@ from uuid import UUID, uuid4
 
 from k9_expert.application.indexing import EmbedFragments
 from k9_expert.application.observability import TraceRecorder
+from k9_expert.domain.breed_vocabulary import (
+    classify,
+    discover_breeds,
+    validate_classification,
+)
 from k9_expert.domain.errors import DomainError, OcrUnavailableError
 from k9_expert.domain.models import JobStage
 from k9_expert.infrastructure.extraction import (
@@ -118,8 +123,15 @@ class IngestionWorker:
             with trace.stage("chunking"):
                 blocks = HeadingDetector().structure(pages)
                 chunks = PageAwareChunker().chunk(blocks)
+                # Breeds come from this document's heading tree, so classification needs
+                # the whole structure before any chunk is labelled.
+                discovered = discover_breeds({block.section_path for block in blocks})
+                classifications = [classify(chunk.section_path, discovered) for chunk in chunks]
+                for classification in classifications:
+                    validate_classification(classification, discovered)
             with trace.stage("persisting_fragments"):
-                for chunk in chunks:
+                self.content.add_breed_discovery(UUID(version_id), discovered)
+                for chunk, classification in zip(chunks, classifications, strict=True):
                     used_ocr = any(methods[page] == "ocr" for page in chunk.covered_pages)
                     self.content.add_fragment(
                         uuid4(),
@@ -132,16 +144,13 @@ class IngestionWorker:
                         "ocr" if used_ocr else "direct",
                         chunk.chunking_version,
                         "/".join(chunk.section_path),
-                        chunk.classification,
+                        classification,
                     )
             trace.set(
                 fragment_count=len(chunks),
-                classified_fragments=sum(
-                    1 for chunk in chunks if chunk.classification.provenance
-                ),
-                classification_policy=(
-                    chunks[0].classification.policy_version if chunks else None
-                ),
+                classified_fragments=sum(1 for item in classifications if item.provenance),
+                classification_policy=discovered.policy_version,
+                discovered_breeds=len(discovered.names),
             )
             if self.publish is None or self.prepare_index is None:
                 self.jobs.update_stage(job_id, JobStage.AVAILABLE, "fragments_persisted")

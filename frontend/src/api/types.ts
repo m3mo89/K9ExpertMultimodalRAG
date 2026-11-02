@@ -356,6 +356,13 @@ export interface ModelConfiguration {
   breed_match_minimum_coverage: number
 }
 
+/** A breed of the active library, discovered from the headings of its documents. */
+export interface BreedSummary {
+  name: string
+  group: string | null
+  fragment_count: number
+}
+
 export interface BreedProfileSection {
   heading: string
   text: string

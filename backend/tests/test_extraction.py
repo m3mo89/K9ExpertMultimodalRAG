@@ -3,6 +3,7 @@ from pathlib import Path
 import fitz
 import pytest
 
+from k9_expert.domain.breed_vocabulary import classify, discover_breeds
 from k9_expert.domain.errors import OcrUnavailableError
 from k9_expert.infrastructure.extraction import (
     ExtractedPage,
@@ -103,7 +104,8 @@ def test_heading_detection_and_page_aware_chunks_preserve_provenance() -> None:
     chunks = PageAwareChunker(max_tokens=3, overlap_tokens=1).chunk(structured)
     assert chunks[0].covered_pages == (7,)
     assert chunks[0].section_path == ("Cuidados",)
-    assert chunks[0].classification.breed is None
+    discovered = discover_breeds({block.section_path for block in structured})
+    assert classify(chunks[0].section_path, discovered).breed is None
     assert chunks[0].content_hash != chunks[1].content_hash
 
 
@@ -147,9 +149,12 @@ def test_typographic_headings_and_section_chunks_name_their_topic() -> None:
     [chunk] = PageAwareChunker().chunk(structured)
     assert chunk.text.startswith("Perros de caza nórdicos › Norsk elghund › Cola\n")
     assert chunk.chunking_version == "page-section-v3-classified"
-    assert chunk.classification.breed == "Norsk elghund"
-    assert chunk.classification.breed_group is None
-    assert chunk.classification.section == "morfologia:cola"
+    classification = classify(
+        chunk.section_path, discover_breeds({block.section_path for block in structured})
+    )
+    assert classification.breed == "Norsk elghund"
+    assert classification.breed_group == "Perros de caza nórdicos"
+    assert classification.section == "morfologia:cola"
 
 
 def test_encyclopedia_golden_structure_keeps_breed_context() -> None:

@@ -22,6 +22,7 @@ from k9_expert.domain.models import (
     SourceRef,
 )
 from k9_expert.infrastructure.sqlite import (
+    SCHEMA_VERSION,
     BreedAnalysisRepository,
     SqliteDatabase,
     SqliteResponseCache,
@@ -108,7 +109,7 @@ def test_new_records_are_backed_up_and_retention_is_additive(tmp_path) -> None:
     backup_db = data / "backups" / str(manifest["backup_id"]) / "k9.sqlite"
     backup = SqliteDatabase(backup_db)
     with backup.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         tables = {
             row["name"]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -116,9 +117,11 @@ def test_new_records_are_backed_up_and_retention_is_additive(tmp_path) -> None:
     assert {"breed_analyses", "analysis_feedback", "semantic_response_cache"} <= tables
 
 
-def test_classified_breeds_reads_rows_before_closing_the_connection(tmp_path) -> None:
+def test_breed_registry_reads_rows_before_closing_the_connection(tmp_path) -> None:
     from k9_expert.infrastructure.sqlite import SnapshotRepository
 
     database = SqliteDatabase(tmp_path / "k9.sqlite")
     database.migrate()
-    assert SnapshotRepository(database).classified_breeds("missing-snapshot", 5) == []
+    snapshots = SnapshotRepository(database)
+    assert snapshots.breed_registry("missing-snapshot") == []
+    assert snapshots.fragment_breeds("missing-snapshot", ["missing-fragment"]) == {}

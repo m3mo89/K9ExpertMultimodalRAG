@@ -286,6 +286,7 @@ def _isolated(service: BreedAnalysisService) -> BreedAnalysisService:
         service.matcher, max_candidates=service.max_candidates, router=service.router,
         sufficiency=service.sufficiency, reformulate=service.reformulate,
         agent_max_iterations=service.agent_max_iterations,
+        registry=service.registry, discovery_pool=service.discovery_pool,
     )
 
 

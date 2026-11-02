@@ -82,7 +82,8 @@ def service(tmp_path, retriever, *, gateway=None, cache=True, sink=None):  # typ
             "INSERT INTO system_state VALUES ('active_snapshot_id', ?)", (str(snapshot_id),)
         )
     return BreedAnalysisService(
-        DocumentRepository(database), retriever, lambda _snapshot, _limit: ["Teckel alemán"],
+        DocumentRepository(database), retriever,
+        lambda _snapshot, _profile, _limit: ["Teckel alemán"],
         BreedAnalysisRepository(database), DeterministicBreedMatcher(),
         cache=AnalysisResponseCache(
             SqliteResponseCache(database), lambda _text: [1.0, 0.0], identity="test"
@@ -247,7 +248,7 @@ def test_discovery_reports_the_breeds_supported_by_the_criteria(tmp_path) -> Non
         return [Evidence(FragmentId(uuid4()), SOURCE, texts[breed], 0.9)]
 
     analyses = service(tmp_path, retrieve, cache=False)
-    analyses.discover_breeds = lambda _snapshot, _limit: list(texts)
+    analyses.discover_breeds = lambda _snapshot, _profile, _limit: list(texts)
     rastro = analyses.analyze(BreedAnalysisProfile((BreedCriterion("hunting_function", "rastro"),)))
     muestra = analyses.analyze(
         BreedAnalysisProfile((BreedCriterion("hunting_function", "muestra"),))

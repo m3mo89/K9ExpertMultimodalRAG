@@ -6,6 +6,7 @@ import pymupdf
 from fastapi.testclient import TestClient
 
 from k9_expert.application.breed_profile import BreedProfileService
+from k9_expert.application.breed_registry import BreedRegistry
 from k9_expert.application.composition import ApplicationSettings, compose
 from k9_expert.infrastructure.breed_images import PdfBreedImages
 from k9_expert.presentation.api import create_app
@@ -33,6 +34,12 @@ class Snapshots:
     def __init__(self, pdf: str) -> None:
         self.pdf = pdf
 
+    def breed_registry(self, _snapshot: str) -> list[dict[str, object]]:
+        return [
+            {"breed": breed, "breed_group": "Sabuesos", "fragments": 3}
+            for breed in ("Beagle", "Fox terrier")
+        ]
+
     def breed_fragments(self, _snapshot: str, breed: str) -> list[dict[str, object]]:
         if breed not in ("Beagle", "Fox terrier"):
             return []
@@ -52,8 +59,10 @@ class Snapshots:
 
 def service(tmp_path: Path) -> BreedProfileService:
     pdf = pdf_with_photos(tmp_path / "libro.pdf")
+    documents, snapshots = Documents(), Snapshots(pdf)
     return BreedProfileService(
-        Documents(), Snapshots(pdf), PdfBreedImages(tmp_path / "cache")  # type: ignore[arg-type]
+        documents, snapshots, PdfBreedImages(tmp_path / "cache"),  # type: ignore[arg-type]
+        BreedRegistry(documents, snapshots),  # type: ignore[arg-type]
     )
 
 
@@ -63,6 +72,17 @@ def test_profile_orders_sections_and_finds_the_captioned_photo(tmp_path: Path) -
     assert profile.sections[0].text == "Raza inglesa antigua de perros de jauría."
     assert profile.sections[0].citation.source.physical_page == 1
     assert (profile.photo_page, profile.photo_caption) == (1, "Beagle")
+
+
+def test_names_resolve_through_the_registry(tmp_path: Path) -> None:
+    profiles = service(tmp_path)
+    assert profiles.profile("beagle").breed == "Beagle"
+    try:
+        profiles.profile("Chihuahua")
+    except KeyError as error:
+        assert error.args == ("breed_not_found",)
+    else:
+        raise AssertionError("unregistered breed must not have a profile")
 
 
 def test_a_photo_captioned_with_another_breed_is_never_used(tmp_path: Path) -> None:

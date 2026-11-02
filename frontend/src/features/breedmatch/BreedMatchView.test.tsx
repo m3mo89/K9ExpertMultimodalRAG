@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { analysisFixture, configurationFixture, profileFixture } from '../../test/breedMatchFixture'
 import { errorBody, fakeApi, renderWithApi } from '../../test/fakeApi'
 import { BreedMatchView } from './BreedMatchView'
@@ -136,5 +136,19 @@ describe('BreedMatchView', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('El servidor no pudo completar')
     expect(await screen.findByText('qwen3.5:2b')).toBeInTheDocument()
     expect(screen.getByText('Alias complex')).toBeInTheDocument()
+  })
+
+  it('suggests the breeds the active library documents', async () => {
+    const api = setup(undefined, {
+      'GET /breeds': [
+        { name: 'Setter irlandés', group: 'Perros de muestra', fragment_count: 4 },
+        { name: 'Drever', group: 'Sabuesos de talla pequeña', fragment_count: 2 },
+      ],
+    })
+    const { container } = renderWithApi(<BreedMatchView />, api.client)
+    const input = screen.getByLabelText(/Razas a comparar/)
+    const list = container.querySelector(`datalist#${CSS.escape(input.getAttribute('list') ?? '')}`)
+    await vi.waitFor(() => expect(list?.querySelectorAll('option')).toHaveLength(2))
+    expect(list?.querySelector('option')).toHaveAttribute('value', 'Setter irlandés')
   })
 })

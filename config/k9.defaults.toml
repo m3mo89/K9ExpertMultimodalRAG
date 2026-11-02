@@ -75,6 +75,9 @@ policy_version = "router-v1"
 policy_version = "breed-match-v1"
 minimum_coverage = 0.5
 max_candidates = 5
+# Breeds evaluated when the request names none, picked from the evidence that best matches
+# the criteria across the whole breed registry.
+discovery_pool = 20
 
 [retention]
 trace_days = 30

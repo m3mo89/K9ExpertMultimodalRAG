@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from k9_expert.domain.breed_vocabulary import classify_section
+from k9_expert.domain.breed_vocabulary import classify, discover_breeds
 from k9_expert.infrastructure.filesystem import (
     ManagedFileStore,
     StagedFile,
@@ -133,16 +133,25 @@ def test_content_persists_versioned_optional_classification(tmp_path: Path) -> N
     document_id, version_id, fragment_id = uuid4(), uuid4(), uuid4()
     documents.create_document(document_id, "Enciclopedia", None, None)
     documents.create_version(version_id, document_id, "hash", "book.pdf", "files/book.pdf")
-    ContentRepository(database).add_fragment(
+    path = ("Perros de rastro", "Teckel alemán", "Manto")
+    discovered = discover_breeds([path])
+    content = ContentRepository(database)
+    content.add_breed_discovery(version_id, discovered)
+    content.add_fragment(
         fragment_id, version_id, "fragment", 1, "Texto", 27, 27, "direct", "v3",
-        "Perros de rastro/Teckel alemán/Manto",
-        classify_section(("Perros de rastro", "Teckel alemán", "Manto")),
+        "/".join(path), classify(path, discovered),
     )
     with database.connect() as connection:
         row = connection.execute(
             "SELECT * FROM fragment_classification WHERE fragment_id = ?", (str(fragment_id),)
         ).fetchone()
+        audit = connection.execute(
+            "SELECT * FROM breed_discovery WHERE version_id = ?", (str(version_id),)
+        ).fetchone()
+    assert audit["breed"] == "Teckel alemán"
+    assert audit["heading_path"] == "Perros de rastro/Teckel alemán"
+    assert audit["signals_json"] == '["seed"]'
     assert row["breed"] == "Teckel alemán"
-    assert row["breed_group"] == "perros de rastro"
+    assert row["breed_group"] == "Perros de rastro"
     assert row["hunting_functions_json"] == '["rastro"]'
     assert row["section"] == "morfologia:manto"

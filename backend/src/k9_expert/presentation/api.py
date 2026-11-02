@@ -223,6 +223,12 @@ class BreedProfileSectionResponse(BaseModel):
     citation: AnalysisCitationResponse
 
 
+class BreedListItem(BaseModel):
+    name: str
+    group: str | None = None
+    fragment_count: int
+
+
 class BreedProfileResponse(BaseModel):
     breed: str
     sections: list[BreedProfileSectionResponse]
@@ -598,10 +604,18 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
 
     @app.post("/api/v1/queries", response_model=QueryResponse)
     def submit_query(request: QueryRequestBody) -> QueryResponse:
+        breeds = tuple(request.filters.breeds)
+        # Filter values must be registered canonical names; an unknown breed would silently
+        # match nothing. Without a registry (no active snapshot) the query reports that instead.
+        if breeds and resolved.breed_registry.names():
+            canonical = [resolved.breed_registry.resolve(name) for name in breeds]
+            if None in canonical:
+                raise HTTPException(status_code=422, detail="breed_not_found")
+            breeds = tuple(name for name in canonical if name is not None)
         filters = QueryFilters(
             document_ids=tuple(DocumentId(item) for item in request.filters.document_ids),
             categories=tuple(request.filters.categories),
-            breeds=tuple(request.filters.breeds),
+            breeds=breeds,
             sections=tuple(request.filters.sections),
         )
         try:
@@ -648,6 +662,13 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             tuple(DocumentId(item) for item in request.document_ids),
         )
         return breed_analysis_response(resolved.breed_analysis_service.analyze(profile))
+
+    @app.get("/api/v1/breeds", response_model=list[BreedListItem])
+    def list_breeds() -> list[BreedListItem]:
+        return [
+            BreedListItem(name=item.name, group=item.group, fragment_count=item.fragment_count)
+            for item in resolved.breed_registry.breeds()
+        ]
 
     @app.get("/api/v1/breeds/{breed}/profile", response_model=BreedProfileResponse)
     def get_breed_profile(breed: str) -> BreedProfileResponse:

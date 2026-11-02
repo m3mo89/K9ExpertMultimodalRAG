@@ -7,7 +7,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import groupby
 
-from k9_expert.domain.breed_vocabulary import BreedClassification, classify_section
 from k9_expert.infrastructure.extraction import ExtractedPage, TextBlock
 
 
@@ -29,7 +28,6 @@ class Chunk:
     section_path: tuple[str, ...]
     covered_pages: tuple[int, ...]
     token_estimate: int
-    classification: BreedClassification
     chunking_version: str = CHUNKING_VERSION
 
 
@@ -69,8 +67,10 @@ class HeadingDetector:
         words = normalized.split()
         if not words or len(words) > 10:
             return None
-        # Captions, list items and figure notes end like sentences; headings do not.
-        if normalized[-1] in ".,;:)»!?":
+        # Captions, list items and figure notes end like sentences; headings do not. A closing
+        # parenthesis only disqualifies body-font lines: "Braco alemán (Kurzhaar)" is a heading.
+        typographic = body is not None and bool(block.font) and _family(block.font) != body
+        if normalized[-1] in ".,;:»!?" or (normalized[-1] == ")" and not typographic):
             return None
         numbered = self._numbered.match(normalized)
         if numbered and len(words) <= 8 and numbered.group(2)[0].isupper():
@@ -127,7 +127,6 @@ class PageAwareChunker:
                         section_path=section,
                         covered_pages=(page,),
                         token_estimate=len(text.split()),
-                        classification=classify_section(section),
                     )
                 )
                 if end == len(words):
