@@ -14,6 +14,8 @@ from k9_expert.domain.models import (
     FindingOutcome,
 )
 
+VERB_LIKE_FUNCTIONS = frozenset({"muestra", "busca"})
+
 
 class DeterministicBreedMatcher:
     policy_version = "breed-match-v1"
@@ -65,12 +67,17 @@ class DeterministicBreedMatcher:
     @staticmethod
     def _finding(criterion: BreedCriterion, evidence: Sequence[Evidence]) -> BreedFinding:
         wanted = _normalize(criterion.value)
-        supporting = [item for item in evidence if wanted in _normalize(item.text)]
+        # "muestra" and "busca" are also everyday verbs ("se muestra", "busca la pieza"):
+        # as hunting functions they must appear in the heading or as "de <función>".
+        strict = criterion.key == "hunting_function" and wanted in VERB_LIKE_FUNCTIONS
+        if strict:
+            supporting = [item for item in evidence if _names_function(item.text, wanted)]
+        else:
+            supporting = [item for item in evidence if wanted in _normalize(item.text)]
         # Negation scope: same clause, at most 35 characters, plural forms included;
         # "sin duda" ("undoubtedly") affirms.
-        negated = re.compile(
-            rf"\b(?:no|nunca|sin)\b(?!\s+duda)[^.;:]{{0,35}}\b{re.escape(wanted)}"
-        )
+        target = rf"del? {re.escape(wanted)}\b" if strict else re.escape(wanted)
+        negated = re.compile(rf"\b(?:no|nunca|sin)\b(?!\s+duda)[^.;:]{{0,35}}\b{target}")
         contradicting = [item for item in evidence if negated.search(_normalize(item.text))]
         if supporting and not contradicting:
             outcome, selected = FindingOutcome.MATCH, supporting
@@ -83,6 +90,16 @@ class DeterministicBreedMatcher:
             explanation = "No documentado en la evidencia recuperada."
         citations = tuple(Citation(item.fragment_id, item.source) for item in selected)
         return BreedFinding(criterion, outcome, explanation, citations)
+
+
+def _names_function(text: str, function: str) -> bool:
+    """A hunting function as a function, not as a word: the section heading (first line,
+    e.g. "Perros de muestra › Pointer › Manto") or "de <función>" in the body. This keeps
+    the verb "se muestra" from counting as a pointing dog."""
+    heading, _, body = text.partition("\n")
+    return function in _normalize(heading) or bool(
+        re.search(rf"\bdel? {re.escape(function)}\b", _normalize(body))
+    )
 
 
 def _normalize(value: str) -> str:

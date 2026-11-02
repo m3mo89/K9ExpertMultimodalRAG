@@ -48,7 +48,7 @@ test('the default view completes a BreedMatch analysis without chat', async ({ p
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1, name: 'Análisis de razas' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Análisis de razas' })).toHaveAttribute('aria-current', 'page')
-  await page.getByLabel('Valor del criterio 1').fill('rastro')
+  await page.getByRole('button', { name: 'pelo duro' }).click()
   await page.getByRole('button', { name: 'Analizar razas' }).click()
   const report = page.getByRole('region', { name: 'Informe de análisis' })
   await expect(report.getByRole('table', { name: 'Comparación por criterio' })).toBeVisible()

@@ -15,8 +15,8 @@ function setup(analysis: unknown = { status: 201, body: analysisFixture }, extra
 
 async function analyze() {
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: 'Añadir criterio' }))
-  await user.type(screen.getByLabelText('Valor del criterio 2'), 'pelo duro')
+  await user.click(screen.getByRole('button', { name: 'pelo duro' }))
+  await user.click(screen.getByText('Comparar sólo razas concretas (opcional)'))
   await user.type(screen.getByLabelText(/Razas a comparar/), 'Teckel alemán, Basset hound')
   await user.click(screen.getByRole('button', { name: 'Analizar razas' }))
   return user
@@ -57,6 +57,27 @@ describe('BreedMatchView', () => {
       document_ids: [],
     })
     expect(api.requests.some((item) => /queries|conversations/.test(item.url))).toBe(false)
+  })
+
+  it('builds criteria from guided choices and marks essentials with double weight', async () => {
+    const api = setup()
+    renderWithApi(<BreedMatchView />, api.client)
+    const user = userEvent.setup()
+    expect(screen.getByRole('button', { name: 'rastro' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Imprescindible: rastro' }))
+    await user.click(screen.getByRole('button', { name: 'cubil' }))
+    await user.click(screen.getByRole('button', { name: 'rastro' }))
+    await user.click(screen.getByRole('button', { name: 'rastro' }))
+    await user.click(screen.getByRole('button', { name: 'Analizar razas' }))
+    await screen.findByRole('region', { name: 'Informe de análisis' })
+    const request = api.requests.find((item) => item.url === '/api/v1/breed-analyses')
+    expect(request?.body).toMatchObject({
+      criteria: [
+        { key: 'work_aptitude', value: 'cubil', weight: 1 },
+        { key: 'hunting_function', value: 'rastro', weight: 1 },
+      ],
+      candidate_breeds: [],
+    })
   })
 
   it('records useful feedback for the analysis', async () => {

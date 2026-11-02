@@ -878,7 +878,7 @@ class SnapshotRepository:
                 WHERE m.snapshot_id = ? AND c.breed IS NOT NULL
                 GROUP BY c.breed ORDER BY fragments DESC, c.breed LIMIT ?""",
                 (snapshot_id, limit),
-            )
+            ).fetchall()
         return [str(row["breed"]) for row in rows]
 
     def snapshot(self, snapshot_id: str) -> sqlite3.Row | None:

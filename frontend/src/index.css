@@ -901,26 +901,67 @@ details > summary {
 
 /* BreedMatch: criteria form and comparison report. */
 
-.criteria-list {
-  margin: 0 0 0.5rem;
+.choice-group {
+  margin: 0 0 0.75rem;
   padding: 0;
-  list-style: none;
+  border: 0;
 }
 
-.criterion-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) 6rem auto;
-  gap: 0 0.75rem;
-  align-items: end;
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.criterion-row input[type='number'] {
-  width: 100%;
+.chip-pair {
+  display: inline-flex;
+}
+
+.chip,
+.chip-star {
   min-height: 44px;
-  padding: 0.5rem 0.65rem;
+  min-width: 44px;
+  padding: 0 1rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.chip-pair .chip[aria-pressed='true'] {
+  border-radius: 999px 0 0 999px;
+}
+
+.chip-star {
+  padding: 0 0.75rem;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.breed-scope {
+  margin: 0.5rem 0;
+}
+
+.breed-scope summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 .criteria-form .button-row {
@@ -971,17 +1012,6 @@ details > summary {
 /* Small screens: stack the chat sidebar and simplify the header. */
 
 @media (max-width: 760px) {
-  .criterion-row {
-    grid-template-columns: minmax(0, 1fr) 5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .criterion-row > label:nth-child(2) {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
   .topbar {
     position: static;
     flex-direction: column;

@@ -80,3 +80,26 @@ def test_negation_covers_plurals_stays_in_its_clause_and_ignores_sin_duda() -> N
     assert labrador.findings[0].outcome == FindingOutcome.MISMATCH
     assert golden.findings[1].outcome == FindingOutcome.MATCH
     assert teckel.findings[2].outcome == FindingOutcome.MATCH
+
+
+def test_hunting_function_needs_a_heading_or_de_function_not_the_verb() -> None:
+    profile = BreedAnalysisProfile((BreedCriterion("hunting_function", "muestra", 1),))
+    candidates = DeterministicBreedMatcher().match(profile, {
+        "Teckel": [evidence("Teckel › Carácter\nSe muestra valiente ante el tejón.")],
+        "Pointer": [evidence("Perros de muestra › Pointer › Manto\nEl pelo es corto.")],
+        "Braco": [evidence("Braco › Trabajo\nExcelente perro de muestra.")],
+    })
+    outcomes = {item.breed: item.findings[0].outcome for item in candidates}
+    assert outcomes == {
+        "Teckel": FindingOutcome.NOT_DOCUMENTED,
+        "Pointer": FindingOutcome.MATCH,
+        "Braco": FindingOutcome.MATCH,
+    }
+
+
+def test_verb_negation_does_not_contradict_the_pointing_function() -> None:
+    profile = BreedAnalysisProfile((BreedCriterion("hunting_function", "muestra", 1),))
+    [pointer] = DeterministicBreedMatcher().match(profile, {
+        "Pointer": [evidence("Perros de muestra › Pointer\nNo se muestra agresivo.")],
+    })
+    assert pointer.findings[0].outcome == FindingOutcome.MATCH

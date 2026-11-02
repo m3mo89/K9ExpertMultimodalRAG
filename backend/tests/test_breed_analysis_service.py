@@ -233,3 +233,24 @@ def test_reformulation_adds_evidence_instead_of_replacing_it(tmp_path) -> None:
         FindingOutcome.MATCH, FindingOutcome.MATCH,
     ]
     assert retriever.requests[0].text == "Teckel alemán: manto pelo sedosa"
+
+
+def test_discovery_reports_the_breeds_supported_by_the_criteria(tmp_path) -> None:
+    texts = {
+        "Beagle": "Perro de rastro de la liebre.",
+        "Pointer": "Perro de muestra de pelo corto.",
+        "Setter inglés": "Perro de muestra de pelo sedoso.",
+    }
+
+    def retrieve(request: QueryRequest) -> list[Evidence]:
+        [breed] = request.filters.breeds
+        return [Evidence(FragmentId(uuid4()), SOURCE, texts[breed], 0.9)]
+
+    analyses = service(tmp_path, retrieve, cache=False)
+    analyses.discover_breeds = lambda _snapshot, _limit: list(texts)
+    rastro = analyses.analyze(BreedAnalysisProfile((BreedCriterion("hunting_function", "rastro"),)))
+    muestra = analyses.analyze(
+        BreedAnalysisProfile((BreedCriterion("hunting_function", "muestra"),))
+    )
+    assert [item.breed for item in rastro.candidates] == ["Beagle"]
+    assert {item.breed for item in muestra.candidates} == {"Pointer", "Setter inglés"}

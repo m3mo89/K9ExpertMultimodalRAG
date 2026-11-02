@@ -22,20 +22,36 @@ import { FeedbackControls } from '../chat/FeedbackControls'
 
 export const MAX_CRITERIA = 12
 
-interface CriterionRow extends BreedCriterion {
-  id: string
-}
+/** Hunting functions of the controlled corpus vocabulary (k9-reference-v1). */
+export const HUNTING_FUNCTIONS = ['rastro', 'muestra', 'cobro', 'busca', 'terrier', 'agua']
 
-const criterionKeys = Object.keys(criterionLabels) as CriterionKey[]
+/**
+ * Guided choices instead of free text: each option is a term the reference book uses, so it
+ * can be found in the evidence. Vague words ("buena", "grande") would match almost anything.
+ */
+const GROUPS: { key: CriterionKey; question: string; options: string[] }[] = [
+  { key: 'hunting_function', question: '¿Para qué caza lo quiere?', options: HUNTING_FUNCTIONS },
+  {
+    key: 'coat',
+    question: '¿Qué manto prefiere?',
+    options: ['pelo duro', 'pelo corto', 'pelo largo', 'sedoso', 'impermeable'],
+  },
+  {
+    key: 'work_aptitude',
+    question: '¿Qué trabajo debe hacer?',
+    options: ['cubil', 'liebre', 'agua', 'olfato', 'obediencia'],
+  },
+]
+
+/** An essential choice counts double in the score; the explanation shows the weights. */
+const ESSENTIAL_WEIGHT = 2
+
+const choiceId = (key: CriterionKey, value: string) => `${key}:${value}`
 
 const outcomeTone: Record<FindingOutcome, 'ok' | 'error' | 'neutral'> = {
   match: 'ok',
   mismatch: 'error',
   not_documented: 'neutral',
-}
-
-function newRow(key: CriterionKey = 'hunting_function', value = ''): CriterionRow {
-  return { id: crypto.randomUUID(), key, value, weight: 1 }
 }
 
 function percent(value: number): string {
@@ -56,16 +72,35 @@ function matchedWeight(candidate: BreedCandidate, criteria: BreedCriterion[]): n
 export function BreedMatchView() {
   const api = useApi()
   const breedsId = useId()
-  const [rows, setRows] = useState<CriterionRow[]>(() => [newRow('hunting_function', 'rastro')])
+  // Selected choices in click order; the value is the criterion sent to the API.
+  const [selected, setSelected] = useState<BreedCriterion[]>([
+    { key: 'hunting_function', value: 'rastro', weight: 1 },
+  ])
   const [breeds, setBreeds] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [report, setReport] = useState<BreedAnalysisResponse | null>(null)
 
-  const update = (id: string, patch: Partial<CriterionRow>) =>
-    setRows((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  const find = (key: CriterionKey, value: string) =>
+    selected.find((item) => choiceId(item.key, item.value) === choiceId(key, value))
 
-  const usable = rows.filter((item) => item.value.trim())
+  const toggle = (key: CriterionKey, value: string) =>
+    setSelected((items) =>
+      find(key, value)
+        ? items.filter((item) => choiceId(item.key, item.value) !== choiceId(key, value))
+        : [...items, { key, value, weight: 1 }],
+    )
+
+  const toggleEssential = (key: CriterionKey, value: string) =>
+    setSelected((items) =>
+      items.map((item) =>
+        choiceId(item.key, item.value) === choiceId(key, value)
+          ? { ...item, weight: item.weight > 1 ? 1 : ESSENTIAL_WEIGHT }
+          : item,
+      ),
+    )
+
+  const usable = selected
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -74,7 +109,7 @@ export function BreedMatchView() {
     setError(null)
     try {
       const response = await api.submitBreedAnalysis({
-        criteria: usable.map(({ key, value, weight }) => ({ key, value: value.trim(), weight })),
+        criteria: usable,
         candidate_breeds: breeds
           .split(',')
           .map((item) => item.trim())
@@ -94,85 +129,68 @@ export function BreedMatchView() {
       <header className="page-header">
         <h1 id="breedmatch-heading">Análisis de razas</h1>
         <p className="muted">
-          Indique los criterios de caza que necesita. K9 BreedMatch compara razas con la
-          evidencia de la biblioteca y explica cada coincidencia con su cita.
+          Elija lo que necesita de su perro de caza. K9 BreedMatch busca en la biblioteca las
+          razas que lo documentan y explica cada coincidencia con su página.
         </p>
       </header>
       <form className="card criteria-form" onSubmit={submit} aria-label="Criterios de análisis">
-        <fieldset>
-          <legend className="section-label">Criterios</legend>
-          <ol className="criteria-list">
-            {rows.map((row, index) => (
-              <li key={row.id} className="criterion-row">
-                <label>
-                  <span className="small">Tipo de criterio {index + 1}</span>
-                  <select
-                    value={row.key}
-                    onChange={(event) => update(row.id, { key: event.target.value as CriterionKey })}
-                  >
-                    {criterionKeys.map((key) => (
-                      <option key={key} value={key}>
-                        {criterionLabels[key]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span className="small">Valor del criterio {index + 1}</span>
-                  <input
-                    type="text"
-                    value={row.value}
-                    maxLength={200}
-                    placeholder="p. ej. rastro, pelo duro, pequeño"
-                    onChange={(event) => update(row.id, { value: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span className="small">Peso del criterio {index + 1}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    step={1}
-                    value={row.weight}
-                    onChange={(event) =>
-                      update(row.id, {
-                        weight: Math.min(10, Math.max(1, Number(event.target.value) || 1)),
-                      })
-                    }
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="button-ghost"
-                  disabled={rows.length === 1}
-                  onClick={() => setRows((items) => items.filter((item) => item.id !== row.id))}
-                  aria-label={`Quitar criterio ${index + 1}`}
-                >
-                  Quitar
-                </button>
-              </li>
-            ))}
-          </ol>
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={rows.length >= MAX_CRITERIA}
-            onClick={() => setRows((items) => [...items, newRow('coat')])}
-          >
-            Añadir criterio
-          </button>
-        </fieldset>
-        <label htmlFor={breedsId} className="small">
-          Razas a comparar (opcional, separadas por comas)
-        </label>
-        <input
-          id={breedsId}
-          type="text"
-          value={breeds}
-          placeholder="Si lo deja vacío, se usan las razas documentadas en la biblioteca"
-          onChange={(event) => setBreeds(event.target.value)}
-        />
+        {GROUPS.map((group) => (
+          <fieldset key={group.key} className="choice-group">
+            <legend className="section-label">{group.question}</legend>
+            <div className="chip-row">
+              {group.options.map((value) => {
+                const choice = find(group.key, value)
+                const essential = (choice?.weight ?? 0) > 1
+                return (
+                  <span key={value} className="chip-pair">
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-pressed={Boolean(choice)}
+                      disabled={!choice && selected.length >= MAX_CRITERIA}
+                      onClick={() => toggle(group.key, value)}
+                    >
+                      {value}
+                    </button>
+                    {choice && (
+                      <button
+                        type="button"
+                        className="chip-star"
+                        aria-pressed={essential}
+                        aria-label={`Imprescindible: ${value}`}
+                        title="Imprescindible (cuenta doble)"
+                        onClick={() => toggleEssential(group.key, value)}
+                      >
+                        {essential ? '★' : '☆'}
+                      </button>
+                    )}
+                  </span>
+                )
+              })}
+            </div>
+          </fieldset>
+        ))}
+        <p className="small muted" aria-live="polite">
+          {selected.length === 0
+            ? 'Elija al menos una opción.'
+            : `Ha elegido: ${selected
+                .map((item) => `${item.value}${item.weight > 1 ? ' ★' : ''}`)
+                .join(', ')}. Marque ★ lo imprescindible: cuenta doble.`}
+        </p>
+        <details className="breed-scope">
+          <summary>Comparar sólo razas concretas (opcional)</summary>
+          <label htmlFor={breedsId} className="small">
+            Razas a comparar, separadas por comas. Si lo deja vacío, K9 busca las razas con
+            más evidencia para lo que ha elegido.
+          </label>
+          <input
+            id={breedsId}
+            type="text"
+            value={breeds}
+            placeholder="p. ej. Pointer, Setter inglés"
+            onChange={(event) => setBreeds(event.target.value)}
+          />
+        </details>
         <div className="button-row">
           <button
             type="submit"

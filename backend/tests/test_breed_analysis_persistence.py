@@ -114,3 +114,11 @@ def test_new_records_are_backed_up_and_retention_is_additive(tmp_path) -> None:
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
     assert {"breed_analyses", "analysis_feedback", "semantic_response_cache"} <= tables
+
+
+def test_classified_breeds_reads_rows_before_closing_the_connection(tmp_path) -> None:
+    from k9_expert.infrastructure.sqlite import SnapshotRepository
+
+    database = SqliteDatabase(tmp_path / "k9.sqlite")
+    database.migrate()
+    assert SnapshotRepository(database).classified_breeds("missing-snapshot", 5) == []

@@ -40,6 +40,8 @@ DiscoverBreeds = Callable[[str, int], list[str]]
 Reformulate = Callable[[str, list[Evidence]], str]
 
 NARRATIVE_PROMPT_VERSION = "breed-narrative-v1"
+# Breeds evaluated when the user names none; the reference vocabulary has 13.
+DISCOVERY_POOL = 20
 # Spanish retrieval terms per criterion key; the corpus headings use these words.
 CRITERION_QUERY_TERMS = {
     "hunting_function": "función de caza",
@@ -153,9 +155,13 @@ class BreedAnalysisService:
                 source.summary,
             ))
 
-        breeds = (list(profile.candidate_breeds) or self.discover_breeds(
-            snapshot, self.max_candidates
-        ))[: self.max_candidates]
+        # Without explicit breeds, every documented breed is evaluated against the criteria and
+        # the best-supported ones are reported (evidence-driven discovery, not a fixed list).
+        discovering = not profile.candidate_breeds
+        breeds = (
+            self.discover_breeds(snapshot, DISCOVERY_POOL)
+            if discovering else list(profile.candidate_breeds)[: self.max_candidates]
+        )
         if not breeds:
             return finish(BreedAnalysisReport(
                 analysis_id, AnalysisStatus.ABSTAINED, profile, bound,
@@ -181,6 +187,10 @@ class BreedAnalysisService:
 
         with trace.stage("matching"):
             candidates = tuple(self.matcher.match(profile, evidence_by_breed))
+        if discovering:
+            candidates = _best_supported(candidates, self.max_candidates)
+            evidence_by_breed = {item.breed: evidence_by_breed[item.breed] for item in candidates}
+            trace.set(discovery_pool=len(breeds))
         evidence_count = sum(len(items) for items in evidence_by_breed.values())
         with trace.stage("route"):
             route = self.router.route({
@@ -370,6 +380,21 @@ class BreedAnalysisService:
         return self.repository.add_feedback(
             AnalysisFeedback(report.analysis_id, useful, comment), report.trace_id or "",
         )
+
+
+def _best_supported(
+    candidates: tuple[BreedCandidate, ...], limit: int
+) -> tuple[BreedCandidate, ...]:
+    """Discovered breeds with documented matches first, then the matcher's own order."""
+    def matched(candidate: BreedCandidate) -> float:
+        return sum(
+            finding.criterion.weight for finding in candidate.findings
+            if finding.outcome == FindingOutcome.MATCH
+        )
+
+    supported = [item for item in candidates if matched(item) > 0]
+    ranked = sorted(supported, key=matched, reverse=True) or list(candidates)
+    return tuple(ranked[:limit])
 
 
 def _outcome(decision: GuardrailDecision) -> str:
