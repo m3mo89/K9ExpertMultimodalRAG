@@ -14,6 +14,7 @@ from k9_expert.application.admin import AdminSecurityService
 from k9_expert.application.agent import DomainPreservingReformulator
 from k9_expert.application.breed_analysis import BreedAnalysisService
 from k9_expert.application.breed_match import DeterministicBreedMatcher
+from k9_expert.application.breed_profile import BreedProfileService
 from k9_expert.application.documents import DocumentRegistrationService, PdfValidator
 from k9_expert.application.generation import (
     PROMPT_VERSION,
@@ -42,6 +43,7 @@ from k9_expert.application.query_service import QueryService
 from k9_expert.application.recovery import BackupService, IndexMaintainer, RestoreService
 from k9_expert.application.response_cache import AnalysisResponseCache, QueryResponseCache
 from k9_expert.application.routing import ComplexityRouter
+from k9_expert.infrastructure.breed_images import PdfBreedImages
 from k9_expert.infrastructure.embeddings import (
     CachingEmbedder,
     DocumentEmbedder,
@@ -140,6 +142,7 @@ class ApplicationContainer:
     ingestion_worker: IngestionWorker
     system_state: SystemStateRepository
     breed_analysis_service: BreedAnalysisService
+    breed_profile_service: BreedProfileService
 
 
 # TOML key -> settings field. The admin secret is deliberately not read from files.
@@ -445,6 +448,9 @@ def compose(
         ),
         system_state=state,
         breed_analysis_service=breed_analysis_service,
+        breed_profile_service=BreedProfileService(
+            documents, snapshots, PdfBreedImages(resolved.data_dir / "cache" / "breed-images")
+        ),
     )
 
 

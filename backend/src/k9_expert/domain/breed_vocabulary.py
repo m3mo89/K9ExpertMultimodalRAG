@@ -90,3 +90,17 @@ def validate_classification(classification: BreedClassification) -> None:
         raise ValueError("classification_section_invalid")
     if classification.policy_version != VOCABULARY_VERSION:
         raise ValueError("classification_policy_invalid")
+
+
+# Photo captions name varieties ("Labrador amarillo", "Teckel de pelo largo"); they only
+# select illustrations and never change fragment classification.
+CAPTION_ALIASES = {**BREED_ALIASES, "labrador": "Retriever del Labrador"}
+
+
+def breed_for_caption(caption: str) -> str | None:
+    """The breed a photo caption starts with, preferring the longest alias."""
+    normalized = normalize(caption)
+    for alias in sorted(CAPTION_ALIASES, key=len, reverse=True):
+        if normalized == alias or normalized.startswith(alias + " "):
+            return CAPTION_ALIASES[alias]
+    return None

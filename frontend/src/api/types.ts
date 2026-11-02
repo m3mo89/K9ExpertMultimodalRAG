@@ -355,3 +355,18 @@ export interface ModelConfiguration {
   agent_max_iterations: number
   breed_match_minimum_coverage: number
 }
+
+export interface BreedProfileSection {
+  heading: string
+  text: string
+  citation: AnalysisCitation
+}
+
+/** Breed sheet taken from the active corpus: book text per section and its captioned photo. */
+export interface BreedProfile {
+  breed: string
+  sections: BreedProfileSection[]
+  photo_url: string | null
+  photo_caption: string | null
+  photo_page: number | null
+}

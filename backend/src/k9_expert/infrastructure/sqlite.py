@@ -870,6 +870,22 @@ class SnapshotRepository:
             )
             return [str(row["fragment_id"]) for row in rows]
 
+    def breed_fragments(self, snapshot_id: str, breed: str) -> list[sqlite3.Row]:
+        """Every fragment of the snapshot classified under `breed`, in reading order."""
+        with self.database.connect() as connection:
+            return connection.execute(
+                """SELECT f.id, f.text, f.page_start, f.section_path, f.version_id,
+                v.document_id, v.file_path, v.edition, d.title, d.author, p.printed_page_label
+                FROM snapshot_membership m JOIN fragments f ON f.id = m.fragment_id
+                JOIN fragment_classification c ON c.fragment_id = f.id
+                JOIN document_versions v ON v.id = f.version_id
+                JOIN documents d ON d.id = v.document_id
+                LEFT JOIN pages p ON p.version_id = f.version_id AND p.physical_page = f.page_start
+                WHERE m.snapshot_id = ? AND c.breed = ?
+                ORDER BY d.title, f.page_start, f.ordinal""",
+                (snapshot_id, breed),
+            ).fetchall()
+
     def classified_breeds(self, snapshot_id: str, limit: int = 20) -> list[str]:
         with self.database.connect() as connection:
             rows = connection.execute(

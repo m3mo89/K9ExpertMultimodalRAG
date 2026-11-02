@@ -3,6 +3,7 @@ import type {
   AnalysisFeedback,
   BreedAnalysisRequest,
   BreedAnalysisResponse,
+  BreedProfile,
   CitationDetail,
   Confirmation,
   Conversation,
@@ -134,6 +135,8 @@ export class ApiClient {
       method: 'POST',
       body: { useful, comment },
     })
+  breedProfile = (breed: string) =>
+    this.request<BreedProfile>(`/breeds/${encodeURIComponent(breed)}/profile`)
   configuration = () => this.request<ModelConfiguration>('/configuration')
   listDocuments = () => this.request<DocumentSummary[]>('/documents')
   listVersions = (documentId: string) =>

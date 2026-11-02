@@ -19,6 +19,7 @@ import {
   reasonMessage,
 } from '../../labels'
 import { FeedbackControls } from '../chat/FeedbackControls'
+import { BreedProfileDialog } from './BreedProfileDialog'
 
 export const MAX_CRITERIA = 12
 
@@ -222,6 +223,7 @@ function statusTone(status: BreedAnalysisResponse['status']): 'ok' | 'warn' | 'e
 
 export function AnalysisReport({ report }: { report: BreedAnalysisResponse }) {
   const reason = report.status === 'completed' ? null : reasonMessage(report.reason)
+  const [profileBreed, setProfileBreed] = useState<string | null>(null)
   return (
     <section className="card analysis-report" aria-label="Informe de análisis">
       <div className="card-head">
@@ -239,11 +241,15 @@ export function AnalysisReport({ report }: { report: BreedAnalysisResponse }) {
       )}
       {report.candidates.length > 0 && (
         <>
-          <ComparisonTable report={report} />
+          <ComparisonTable report={report} onOpen={setProfileBreed} />
           <ScoreExplanation report={report} />
           <h3 className="section-label">Evidencia por raza</h3>
           {report.candidates.map((candidate) => (
-            <CandidateEvidence key={candidate.breed} candidate={candidate} />
+            <CandidateEvidence
+              key={candidate.breed}
+              candidate={candidate}
+              onOpen={setProfileBreed}
+            />
           ))}
         </>
       )}
@@ -262,11 +268,20 @@ export function AnalysisReport({ report }: { report: BreedAnalysisResponse }) {
       </p>
       <ExecutionDetails report={report} />
       <FeedbackControls analysisId={report.analysis_id} />
+      {profileBreed && (
+        <BreedProfileDialog breed={profileBreed} onClose={() => setProfileBreed(null)} />
+      )}
     </section>
   )
 }
 
-function ComparisonTable({ report }: { report: BreedAnalysisResponse }) {
+function ComparisonTable({
+  report,
+  onOpen,
+}: {
+  report: BreedAnalysisResponse
+  onOpen: (breed: string) => void
+}) {
   return (
     <div className="table-scroll" role="region" aria-label="Tabla comparativa" tabIndex={0}>
       <table className="count-table comparison-table">
@@ -291,7 +306,16 @@ function ComparisonTable({ report }: { report: BreedAnalysisResponse }) {
         <tbody>
           {report.candidates.map((candidate) => (
             <tr key={candidate.breed}>
-              <th scope="row">{candidate.breed}</th>
+              <th scope="row">
+                <button
+                  type="button"
+                  className="button-link breed-link"
+                  aria-label={`Ver ficha de ${candidate.breed}`}
+                  onClick={() => onOpen(candidate.breed)}
+                >
+                  {candidate.breed}
+                </button>
+              </th>
               {candidate.findings.map((finding) => (
                 <td key={`${finding.criterion_key}:${finding.criterion_value}`}>
                   <StatusBadge tone={outcomeTone[finding.outcome]}>
@@ -335,10 +359,19 @@ function ScoreExplanation({ report }: { report: BreedAnalysisResponse }) {
   )
 }
 
-function CandidateEvidence({ candidate }: { candidate: BreedCandidate }) {
+function CandidateEvidence({
+  candidate,
+  onOpen,
+}: {
+  candidate: BreedCandidate
+  onOpen: (breed: string) => void
+}) {
   return (
     <details className="candidate-evidence">
       <summary>{candidate.breed}</summary>
+      <button type="button" className="button-secondary" onClick={() => onOpen(candidate.breed)}>
+        Ver ficha de {candidate.breed}
+      </button>
       <ul className="finding-list">
         {candidate.findings.map((finding) => (
           <li key={`${finding.criterion_key}:${finding.criterion_value}`} className="finding">

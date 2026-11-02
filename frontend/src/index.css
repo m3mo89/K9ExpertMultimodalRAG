@@ -1009,6 +1009,27 @@ details > summary {
   margin: 0.15rem 0;
 }
 
+.breed-link {
+  min-height: 44px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.breed-photo {
+  margin: 0 0 1rem;
+}
+
+.breed-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+.profile-section p {
+  margin: 0.25rem 0;
+}
+
 /* Small screens: stack the chat sidebar and simplify the header. */
 
 @media (max-width: 760px) {

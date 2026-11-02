@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { analysisFixture, configurationFixture } from '../../test/breedMatchFixture'
+import { analysisFixture, configurationFixture, profileFixture } from '../../test/breedMatchFixture'
 import { errorBody, fakeApi, renderWithApi } from '../../test/fakeApi'
 import { BreedMatchView } from './BreedMatchView'
 
@@ -78,6 +78,25 @@ describe('BreedMatchView', () => {
       ],
       candidate_breeds: [],
     })
+  })
+
+  it('opens a breed sheet with book text, page and photo from the comparison table', async () => {
+    const api = setup(undefined, {
+      'GET /breeds/Teckel%20alem%C3%A1n/profile': profileFixture,
+    })
+    renderWithApi(<BreedMatchView />, api.client)
+    const user = await analyze()
+    const table = await screen.findByRole('table', { name: 'Comparación por criterio' })
+    await user.click(within(table).getByRole('button', { name: 'Ver ficha de Teckel alemán' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Teckel alemán' })
+    expect(await within(dialog).findByText(/descienden de antiguos perros/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/pág\. 26/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('img', { name: 'Teckel de pelo corto' })).toHaveAttribute(
+      'src',
+      profileFixture.photo_url,
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('records useful feedback for the analysis', async () => {

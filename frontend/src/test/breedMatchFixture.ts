@@ -93,3 +93,25 @@ export const configurationFixture = {
   agent_max_iterations: 2,
   breed_match_minimum_coverage: 0.5,
 }
+
+export const profileFixture = {
+  breed: 'Teckel alemán',
+  sections: [
+    {
+      heading: 'Historia',
+      text: 'Los teckel alemanes descienden de antiguos perros de caza bajo tierra.',
+      citation: {
+        id: null,
+        fragment_id: 'frag-9',
+        document_id: 'doc-1',
+        version_id: 'ver-1',
+        title: 'Enciclopedia de perros de caza',
+        physical_page: 26,
+        printed_page_label: null,
+      },
+    },
+  ],
+  photo_url: '/api/v1/breeds/Teckel%20alem%C3%A1n/photo',
+  photo_caption: 'Teckel de pelo corto',
+  photo_page: 25,
+}

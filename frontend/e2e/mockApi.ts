@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { analysisFixture, configurationFixture } from '../src/test/breedMatchFixture.ts'
+import { analysisFixture, configurationFixture, profileFixture } from '../src/test/breedMatchFixture.ts'
 
 const document = {
   id: 'doc-1',
@@ -28,6 +28,7 @@ const citation = {
 const routes: Record<string, unknown> = {
   'GET /health': { status: 'ok', worker_concurrency: 1 },
   'GET /configuration': configurationFixture,
+  'GET /breeds/Teckel%20alem%C3%A1n/profile': profileFixture,
   'POST /breed-analyses': analysisFixture,
   'POST /breed-analyses/an-1/feedback': {
     id: 'f-1', analysis_id: 'an-1', trace_id: 'trace-9', useful: 1, comment: null, created_at: 't',

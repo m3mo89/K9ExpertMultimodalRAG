@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from fastapi import (
@@ -18,7 +19,7 @@ from fastapi import (
     status,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from k9_expert.application.composition import ApplicationContainer, compose
@@ -214,6 +215,20 @@ class BreedAnalysisResponse(BaseModel):
     reason: str | None = None
     execution: AnalysisExecutionResponse = Field(default_factory=AnalysisExecutionResponse)
     summary: str | None = None
+
+
+class BreedProfileSectionResponse(BaseModel):
+    heading: str
+    text: str
+    citation: AnalysisCitationResponse
+
+
+class BreedProfileResponse(BaseModel):
+    breed: str
+    sections: list[BreedProfileSectionResponse]
+    photo_url: str | None = None
+    photo_caption: str | None = None
+    photo_page: int | None = None
 
 
 class AnalysisFeedbackRequest(BaseModel):
@@ -633,6 +648,41 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             tuple(DocumentId(item) for item in request.document_ids),
         )
         return breed_analysis_response(resolved.breed_analysis_service.analyze(profile))
+
+    @app.get("/api/v1/breeds/{breed}/profile", response_model=BreedProfileResponse)
+    def get_breed_profile(breed: str) -> BreedProfileResponse:
+        try:
+            profile = resolved.breed_profile_service.profile(breed)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="breed_not_found") from error
+        return BreedProfileResponse(
+            breed=profile.breed,
+            sections=[BreedProfileSectionResponse(
+                heading=item.heading, text=item.text,
+                citation=AnalysisCitationResponse(
+                    fragment_id=str(item.citation.evidence_id),
+                    document_id=str(item.citation.source.document_id),
+                    version_id=str(item.citation.source.version_id),
+                    title=item.citation.source.title,
+                    physical_page=item.citation.source.physical_page,
+                    printed_page_label=item.citation.source.printed_page_label,
+                ),
+            ) for item in profile.sections],
+            photo_url=(
+                f"/api/v1/breeds/{quote(profile.breed)}/photo" if profile.photo_page else None
+            ),
+            photo_caption=profile.photo_caption, photo_page=profile.photo_page,
+        )
+
+    @app.get("/api/v1/breeds/{breed}/photo", response_class=Response)
+    def get_breed_photo(breed: str) -> Response:
+        try:
+            data = resolved.breed_profile_service.photo(breed)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="breed_not_found") from error
+        if data is None:
+            raise HTTPException(status_code=404, detail="photo_not_found")
+        return Response(data, media_type="image/png", headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/api/v1/breed-analyses/{analysis_id}", response_model=BreedAnalysisResponse)
     def get_breed_analysis(analysis_id: str) -> BreedAnalysisResponse:
