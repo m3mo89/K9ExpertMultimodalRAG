@@ -52,6 +52,7 @@ export const componentLabels: Record<string, string> = {
 const errorMessages: Record<string, string> = {
   network_unavailable: 'No se pudo contactar con el servidor local.',
   unexpected_response: 'El servidor devolvió una respuesta inesperada.',
+  internal_error: 'El servidor no pudo completar la solicitud. Inténtelo de nuevo.',
   request_validation_failed: 'La solicitud no es válida.',
   admin_unauthorized: 'Credencial administrativa no válida.',
   conversation_not_found: 'La conversación no existe.',

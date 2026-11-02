@@ -210,6 +210,11 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     async def validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:
         return error_response(422, "request_validation_failed", error.errors())
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(_request: Request, _error: Exception) -> JSONResponse:
+        # Unhandled failures still answer with the envelope; details stay in the server log.
+        return error_response(500, "internal_error")
+
     @app.get("/api/v1/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok", worker_concurrency=resolved.settings.worker_concurrency)

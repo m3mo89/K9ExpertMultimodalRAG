@@ -8,7 +8,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from types import TracebackType
+from typing import Literal, NamedTuple, cast
 from uuid import UUID, uuid4
 
 from k9_expert.domain.models import DocumentStatus, JobStage, TraceEvent
@@ -93,8 +94,36 @@ WHERE m.snapshot_id = ? ORDER BY f.version_id, f.ordinal"""
 PrepareIndex = Callable[[str, str | None, list[sqlite3.Row]], None]
 
 
+# How long a connection waits for another process's write lock before failing. Writers keep
+# transactions short (slow index work runs outside them), so this only absorbs contention.
+BUSY_TIMEOUT_SECONDS = 15.0
+
+# Optimistic publication attempts before giving up when the active state keeps changing.
+PUBLICATION_ATTEMPTS = 3
+
+
 class UnsupportedSchemaError(RuntimeError):
     pass
+
+
+class PublicationConflictError(RuntimeError):
+    """The active snapshot or the document changed while a candidate index was being built."""
+
+
+class _ClosingConnection(sqlite3.Connection):
+    """Commits or rolls back like `sqlite3.Connection`, then closes so no handle outlives its block."""
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+        /,
+    ) -> Literal[False]:
+        try:
+            return super().__exit__(exc_type, exc, traceback)
+        finally:
+            self.close()
 
 
 class SqliteDatabase:
@@ -102,7 +131,9 @@ class SqliteDatabase:
         self.path = path
 
     def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(
+            self.path, timeout=BUSY_TIMEOUT_SECONDS, factory=_ClosingConnection
+        )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
@@ -761,15 +792,15 @@ class SnapshotRepository:
         embedding: tuple[str, str, int],
         prepare_index: PrepareIndex | None = None,
     ) -> tuple[str | None, str]:
-        """Atomically publish a version: candidate membership, index hook, then activation.
+        """Publish a version: candidate membership, index hook, then activation.
 
         Membership keeps every other document's fragments from the active snapshot. If the
-        hook or any check fails, the transaction rolls back and the previous snapshot stays.
+        hook or any check fails, the candidate is discarded and the previous snapshot stays.
         """
-        timestamp = now()
-        with self.database.transaction() as connection:
+
+        def stage(connection: sqlite3.Connection) -> _Candidate:
             target = connection.execute(
-                """SELECT v.document_id, d.status, d.active_version_id FROM document_versions v
+                """SELECT v.document_id, d.status FROM document_versions v
                 JOIN documents d ON d.id = v.document_id WHERE v.id = ?""",
                 (version_id,),
             ).fetchone()
@@ -795,7 +826,7 @@ class SnapshotRepository:
                 raise ValueError("full_reindex_required")
             connection.execute(
                 "INSERT INTO snapshots VALUES (?, ?, ?, ?, 'candidate', ?, NULL)",
-                (str(snapshot_id), *embedding, timestamp),
+                (str(snapshot_id), *embedding, now()),
             )
             if active is not None:
                 connection.execute(
@@ -807,44 +838,42 @@ class SnapshotRepository:
                     (str(snapshot_id), active["id"], target["document_id"]),
                 )
             # A deactivated document gets its new version recorded but stays out of queries.
-            included = target["status"] != DocumentStatus.DEACTIVATED
-            if included:
+            if target["status"] != DocumentStatus.DEACTIVATED:
                 connection.executemany(
                     "INSERT OR IGNORE INTO snapshot_membership (snapshot_id, fragment_id) VALUES (?, ?)",
                     [(str(snapshot_id), fragment_id) for fragment_id in fragment_ids],
                 )
-            if prepare_index is not None:
-                rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
-                prepare_index(str(snapshot_id), active["id"] if active else None, rows)
-            if target["active_version_id"] not in (None, version_id):
+            return _Candidate(str(target["document_id"]), str(active["id"]) if active else None)
+
+        def activate(connection: sqlite3.Connection, candidate: _Candidate, timestamp: str) -> None:
+            # The state is unchanged since staging, so these values match what the index used.
+            document = connection.execute(
+                "SELECT status, active_version_id FROM documents WHERE id = ?",
+                (candidate.document_id,),
+            ).fetchone()
+            if document["active_version_id"] not in (None, version_id):
                 connection.execute(
                     "UPDATE document_versions SET status = 'superseded' WHERE id = ?",
-                    (target["active_version_id"],),
+                    (document["active_version_id"],),
                 )
             connection.execute(
                 "UPDATE document_versions SET status = ? WHERE id = ?",
                 (DocumentStatus.ACTIVE, version_id),
             )
+            included = document["status"] != DocumentStatus.DEACTIVATED
             connection.execute(
                 "UPDATE documents SET active_version_id = ?, status = ?, updated_at = ? WHERE id = ?",
                 (
                     version_id,
                     DocumentStatus.ACTIVE if included else DocumentStatus.DEACTIVATED,
                     timestamp,
-                    target["document_id"],
+                    candidate.document_id,
                 ),
             )
-            if active is not None:
-                connection.execute("UPDATE snapshots SET status = 'retained' WHERE id = ?", (active["id"],))
-            connection.execute(
-                "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ?",
-                (timestamp, str(snapshot_id)),
-            )
-            connection.execute(
-                "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (str(snapshot_id),),
-            )
-        return (str(active["id"]) if active else None), str(snapshot_id)
+            self._activate_candidate(connection, snapshot_id, candidate.previous_id, timestamp)
+
+        previous = self._publish(snapshot_id, stage, activate, prepare_index)
+        return previous, str(snapshot_id)
 
     def publish_document_membership(
         self,
@@ -853,8 +882,7 @@ class SnapshotRepository:
         include: bool,
         prepare_index: PrepareIndex | None = None,
     ) -> tuple[str, str]:
-        timestamp = now()
-        with self.database.transaction() as connection:
+        def stage(connection: sqlite3.Connection) -> _Candidate:
             document = connection.execute(
                 "SELECT active_version_id, status FROM documents WHERE id = ?", (document_id,)
             ).fetchone()
@@ -875,7 +903,7 @@ class SnapshotRepository:
                     active["embedding_alias"],
                     active["embedding_model"],
                     active["embedding_dimensions"],
-                    timestamp,
+                    now(),
                 ),
             )
             connection.execute(
@@ -900,25 +928,92 @@ class SnapshotRepository:
             ).fetchone()
             if invalid is None or invalid["count"]:
                 raise ValueError("invalid_snapshot_membership")
-            if prepare_index is not None:
-                rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
-                prepare_index(str(snapshot_id), str(active["id"]), rows)
-            connection.execute(
-                "UPDATE snapshots SET status = 'retained' WHERE id = ?", (active["id"],)
-            )
-            connection.execute(
-                "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ?",
-                (timestamp, str(snapshot_id)),
-            )
+            return _Candidate(document_id, str(active["id"]))
+
+        def activate(connection: sqlite3.Connection, candidate: _Candidate, timestamp: str) -> None:
+            self._activate_candidate(connection, snapshot_id, candidate.previous_id, timestamp)
             connection.execute(
                 "UPDATE documents SET status = ?, updated_at = ? WHERE id = ?",
                 (DocumentStatus.ACTIVE if include else DocumentStatus.DEACTIVATED, timestamp, document_id),
             )
+
+        previous = self._publish(snapshot_id, stage, activate, prepare_index)
+        return str(previous), str(snapshot_id)
+
+    def _publish(
+        self,
+        snapshot_id: UUID,
+        stage: Callable[[sqlite3.Connection], _Candidate],
+        activate: Callable[[sqlite3.Connection, _Candidate, str], None],
+        prepare_index: PrepareIndex | None,
+    ) -> str | None:
+        """Stages a candidate, builds its index without holding the write lock, then activates.
+
+        Index preparation can take long on a large corpus, so it runs between two short
+        transactions instead of inside one; API requests can keep writing meanwhile. Activation
+        only commits if the active snapshot and the document are exactly as when the candidate
+        was staged; otherwise the candidate is restaged on the new state, reusing its id so the
+        rebuilt index generation replaces the stale one.
+        """
+        for _ in range(PUBLICATION_ATTEMPTS):
+            with self.database.transaction() as connection:
+                candidate = stage(connection)
+                staged_state = _publication_state(connection, candidate.document_id)
+                rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
+            try:
+                if prepare_index is not None:
+                    prepare_index(str(snapshot_id), candidate.previous_id, rows)
+                with self.database.transaction() as connection:
+                    if _publication_state(connection, candidate.document_id) != staged_state:
+                        raise PublicationConflictError("publication_conflict")
+                    activate(connection, candidate, now())
+            except PublicationConflictError:
+                self._discard_candidate(snapshot_id)
+                continue
+            except BaseException:
+                self._discard_candidate(snapshot_id)
+                raise
+            return candidate.previous_id
+        raise PublicationConflictError("publication_conflict")
+
+    def _discard_candidate(self, snapshot_id: UUID) -> None:
+        with self.database.transaction() as connection:
             connection.execute(
-                "UPDATE system_state SET value = ? WHERE key = 'active_snapshot_id'",
-                (str(snapshot_id),),
+                "DELETE FROM snapshot_membership WHERE snapshot_id = ?", (str(snapshot_id),)
             )
-        return str(active["id"]), str(snapshot_id)
+            connection.execute(
+                "DELETE FROM snapshots WHERE id = ? AND status = 'candidate'", (str(snapshot_id),)
+            )
+
+    @staticmethod
+    def _activate_candidate(
+        connection: sqlite3.Connection, snapshot_id: UUID, previous_id: str | None, timestamp: str
+    ) -> None:
+        if previous_id is not None:
+            connection.execute("UPDATE snapshots SET status = 'retained' WHERE id = ?", (previous_id,))
+        connection.execute(
+            "UPDATE snapshots SET status = 'active', published_at = ? WHERE id = ?",
+            (timestamp, str(snapshot_id)),
+        )
+        connection.execute(
+            "INSERT INTO system_state (key, value) VALUES ('active_snapshot_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(snapshot_id),),
+        )
+
+
+class _Candidate(NamedTuple):
+    document_id: str
+    previous_id: str | None
+
+
+def _publication_state(connection: sqlite3.Connection, document_id: str) -> tuple[object, ...]:
+    """What a candidate is built from: the active snapshot and the document's publication state."""
+    row = connection.execute(
+        """SELECT (SELECT value FROM system_state WHERE key = 'active_snapshot_id'),
+        status, active_version_id FROM documents WHERE id = ?""",
+        (document_id,),
+    ).fetchone()
+    return () if row is None else tuple(row)
 
 
 class CacheInvalidator:

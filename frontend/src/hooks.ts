@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ApiError } from './api/client'
+
+/** Consecutive retryable polling failures tolerated (with backoff) before surfacing the error. */
+const MAX_TRANSIENT_FAILURES = 3
 
 export interface AsyncState<T> {
   data: T | null
@@ -54,14 +58,23 @@ export function usePolling<T>(
     let timer: ReturnType<typeof setTimeout> | undefined
     setValue(null)
     setError(null)
+    let failures = 0
     const run = async () => {
       try {
         const next = await tick()
         if (!active) return
+        failures = 0
         setValue(next)
         if (!done.current(next)) timer = setTimeout(run, intervalMs)
       } catch (reason) {
-        if (active) setError(reason)
+        if (!active) return
+        // A transient failure must not abandon a job that keeps progressing on the server.
+        failures += 1
+        if (reason instanceof ApiError && reason.retryable && failures < MAX_TRANSIENT_FAILURES) {
+          timer = setTimeout(run, intervalMs * 2 ** failures)
+          return
+        }
+        setError(reason)
       }
     }
     void run()
