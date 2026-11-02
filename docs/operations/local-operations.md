@@ -19,13 +19,18 @@ npm --prefix frontend ci
 ## 3. Modelos
 
 ```bash
-ollama pull llama3.2:3b               # alias text-default
+ollama pull llama3.2:3b               # alias simple y fallback (también text-default del chat heredado)
+ollama pull qwen3.5:2b                # alias complex
 ollama pull nomic-embed-text:latest   # alias embedding-default (768 dimensiones)
 ```
+
+El enrutador (`[router]`) elige el alias `simple` o `complex` por la complejidad de cada consulta; el gateway resuelve el modelo concreto, aplica `generation_timeout_seconds`, `generation_max_retries` y el respaldo `fallback`, y envía `think=false` para que los modelos con razonamiento devuelvan sólo JSON. Antes de una demostración sin red ejecute `scripts/preflight.py` (ver README).
 
 Ollama debe escuchar sólo en `127.0.0.1:11434`, que es su valor por defecto. Nunca lo expongas a la LAN. El frontend no conoce su dirección.
 
 Cambiar el modelo o la dimensión de embeddings hace incompatible el snapshot activo: la siguiente publicación falla con `full_reindex_required`. En ese caso hay que reconstruir el índice completo partiendo de un directorio de datos vacío (ver §7).
+
+La versión `page-section-v3-classified` añade metadatos auditables de raza, grupo, función y sección. El enriquecimiento se construye en una generación candidata: el snapshot anterior permanece activo hasta que conteo, dimensiones, vocabulario, metadatos y recuperación de humo sean válidos. Un fallo descarta la candidata. Para volver a la generación anterior use el endpoint de rollback de §6; no edite la colección Chroma activa. El cambio de modelo, dimensión o versión de chunking requiere reindexación completa y nunca mezcla vectores incompatibles.
 
 ## 4. Configuración
 
@@ -141,11 +146,12 @@ make web-check web-test web-e2e          # frontend: lint, build, unidad y naveg
 
 ## 11. Limitaciones conocidas
 
-- **Publicación inicial no aprobada.** Las puertas de calidad no se cumplen todavía: precisión de cita 0.61 frente al 0.80 exigido.
+- **Puerta de citas no superada.** La precisión de cita sigue por debajo del 0.80 exigido (ver `docs/evaluation/model-selection-2026-11-02.md` y `docs/evaluation/acceptance-gates-v1.md`).
 - **Fuentes en conflicto.** `llama3.2:3b` no señala discrepancias entre fuentes de forma fiable, aunque el sistema las verifica y las muestra si el modelo las declara.
 - **Umbral de suficiencia.** Está calibrado con 15 preguntas y tiene un margen estrecho.
 - **OCR.** Sin Tesseract instalado.
 - **Páginas impresas.** No se detectan etiquetas de página impresa; las citas usan la página física del PDF.
-- **Metadatos.** No hay metadatos de raza ni categoría por fragmento, así que los filtros de raza no devuelven evidencia. Las abstenciones por filtro son correctas, pero el filtro todavía no es útil.
+- **Metadatos.** La clasificación por raza, grupo, función y apartado cubre 438 de 786 fragmentos del corpus de referencia; los fragmentos sin clasificación no entran en los filtros por raza (preferimos omitir a clasificar mal).
+- **Coincidencia de BreedMatch.** Es por subcadena normalizada con detección simple de negación; un término ambiguo («muestra» también es verbo) puede producir coincidencias falsas. El informe muestra la cita para que el usuario la verifique.
 - **Sin modelo de usuarios.** Un único secreto administrativo; las consultas son abiertas dentro de la red.
 - **Contenido histórico.** Las respuestas son documentales e históricas; no sustituyen consejo veterinario actual.

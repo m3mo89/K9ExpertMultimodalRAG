@@ -1,0 +1,918 @@
+{
+  "manifest": {
+    "run_id": "20261102T045419Z-E2-60bc77",
+    "experiment": "E2",
+    "started_at": "2026-11-02T04:54:19.775493+00:00",
+    "finished_at": "2026-11-02T04:57:31.259523+00:00",
+    "dataset": {
+      "id": "k9-reference",
+      "version": "2.0.0",
+      "sha256": "c887d8ace6f39eb52a2a35c091ad9bb97fe520a29f410d2559f4df99d00843f2"
+    },
+    "prompt_version": "grounded-v4",
+    "models": {
+      "text_alias": "text-default",
+      "text_model": "qwen3.5:2b",
+      "think": false,
+      "embedding_alias": "embedding-default",
+      "embedding_model": "nomic-embed-text:latest",
+      "embedding_dimensions": 768,
+      "embedding_prefixes": [
+        "search_query: ",
+        "search_document: "
+      ],
+      "text_resolved_model": "qwen3.5:2b"
+    },
+    "retrieval": {
+      "embedding_alias": "embedding-default",
+      "embedding_model": "nomic-embed-text:latest",
+      "candidates": 24,
+      "top_k": 6,
+      "minimum_score": 0.0,
+      "context_tokens": 2500,
+      "max_per_section": 2
+    },
+    "corpus": {
+      "snapshot_id": "30ca7aa6-5185-4bcb-b1c5-176f2aeceffe",
+      "fragment_count": 786,
+      "documents": [
+        {
+          "id": "f98f98fd-b35b-4c72-b4bb-dccec63e826d",
+          "title": "Enciclopedia de los perros de caza",
+          "active_version_id": "92d80e3d-d1b6-4bc9-94b7-e335ee49a126"
+        }
+      ]
+    },
+    "code": {
+      "git_commit": "cb18f80095280ff370d475972617db59888c2e6d",
+      "git_dirty": true
+    },
+    "configuration": {
+      "path": "config/k9.defaults.toml",
+      "sha256": "1538f8da53e9fd972b5f9db5ebb515f5a1b21f4bc0cb69cf7b51571700b5f7c5"
+    },
+    "environment": {
+      "python": "3.13.13",
+      "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+      "machine": "arm64",
+      "processor": "arm",
+      "memory_bytes": 19327352832
+    }
+  },
+  "aggregate": {
+    "cases": 22,
+    "recall_at_k": {
+      "1": 0.575,
+      "3": 0.925,
+      "5": 0.925,
+      "8": 0.925
+    },
+    "hit_at_k": {
+      "1": 0.7,
+      "3": 0.95,
+      "5": 0.95,
+      "8": 0.95
+    },
+    "mrr": 0.8083333333333333,
+    "citation_precision": 0.7083333333333334,
+    "grounded_cases_with_citations": 12,
+    "structured_output_rate": 0.9,
+    "abstention_accuracy": 0.6363636363636364,
+    "correct_abstention_rate": 1.0,
+    "false_abstention_rate": 0.4,
+    "latency_ms": {
+      "mean": 8703.676954545455,
+      "p50": 3677.687,
+      "p95": 7824.882,
+      "max": 120037.842
+    }
+  },
+  "by_class": {
+    "comparison": {
+      "cases": 4,
+      "recall_at_k": {
+        "1": 0.375,
+        "3": 0.875,
+        "5": 0.875,
+        "8": 0.875
+      },
+      "hit_at_k": {
+        "1": 0.75,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "mrr": 0.8333333333333334,
+      "citation_precision": 0.6666666666666666,
+      "grounded_cases_with_citations": 4,
+      "structured_output_rate": 1.0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.0,
+      "latency_ms": {
+        "mean": 5023.528,
+        "p50": 3927.042,
+        "p95": 7824.882,
+        "max": 7824.882
+      }
+    },
+    "explicit": {
+      "cases": 14,
+      "recall_at_k": {
+        "1": 0.6428571428571429,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "hit_at_k": {
+        "1": 0.7142857142857143,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "mrr": 0.8452380952380952,
+      "citation_precision": 0.8055555555555555,
+      "grounded_cases_with_citations": 6,
+      "structured_output_rate": 0.8461538461538461,
+      "abstention_accuracy": 0.42857142857142855,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.5714285714285714,
+      "latency_ms": {
+        "mean": 11722.857214285716,
+        "p50": 3838.219,
+        "p95": 120037.842,
+        "max": 120037.842
+      }
+    },
+    "filtered": {
+      "cases": 1,
+      "recall_at_k": null,
+      "hit_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "structured_output_rate": null,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 32.674,
+        "p50": 32.674,
+        "p95": 32.674,
+        "max": 32.674
+      }
+    },
+    "safety": {
+      "cases": 2,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5,
+        "8": 0.5
+      },
+      "hit_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5,
+        "8": 0.5
+      },
+      "mrr": 0.5,
+      "citation_precision": 0.5,
+      "grounded_cases_with_citations": 2,
+      "structured_output_rate": 1.0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": null,
+      "false_abstention_rate": 0.0,
+      "latency_ms": {
+        "mean": 2989.8625,
+        "p50": 2302.038,
+        "p95": 3677.687,
+        "max": 3677.687
+      }
+    },
+    "unsupported": {
+      "cases": 1,
+      "recall_at_k": null,
+      "hit_at_k": null,
+      "mrr": null,
+      "citation_precision": null,
+      "grounded_cases_with_citations": 0,
+      "structured_output_rate": 1.0,
+      "abstention_accuracy": 1.0,
+      "correct_abstention_rate": 1.0,
+      "false_abstention_rate": null,
+      "latency_ms": {
+        "mean": 1254.381,
+        "p50": 1254.381,
+        "p95": 1254.381,
+        "max": 1254.381
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "R1",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 4337.279,
+      "reason": "model_abstained",
+      "difficulty_class": "explicit",
+      "question": "¿Cómo describe el libro la cabeza y el cuerpo del teckel alemán?",
+      "answer": "",
+      "retrieved_pages": [
+        27,
+        28,
+        25,
+        26
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        27
+      ],
+      "trace_id": "34978c8f-9a50-4c42-aa0e-7ac001a681c4"
+    },
+    {
+      "case_id": "R2",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 4081.838,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "Según la enciclopedia, ¿qué cualidades y trabajos se atribuyen al teckel alemán?",
+      "answer": "Cualidades: excelente perro de caza y compañía; trabajo: excelente para el acoso, recuperación de heridas (montero), y en conjunto para cualquier función cazadora o ganadera. Trabajos: caza, ejercicio disciplinado, acoso, captura de presa herida (montero), recuperación de piezas perdidas, acoso de jabalí.",
+      "retrieved_pages": [
+        27,
+        28,
+        26
+      ],
+      "cited_pages": [
+        27,
+        28
+      ],
+      "expected_pages": [
+        27,
+        28
+      ],
+      "trace_id": "0e2cfbf5-5894-4fd8-b796-f5b3124aa8ae"
+    },
+    {
+      "case_id": "R3",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 1182.552,
+      "reason": "model_abstained",
+      "difficulty_class": "explicit",
+      "question": "¿Qué rasgos de cola y manto documenta el libro para el norsk elghund?",
+      "answer": "",
+      "retrieved_pages": [
+        29,
+        30,
+        36,
+        35
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        29
+      ],
+      "trace_id": "4c38a2a9-d73f-4ccf-9613-d754044c91dc"
+    },
+    {
+      "case_id": "R4",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.6666666666666666,
+      "latency_ms": 5033.81,
+      "reason": null,
+      "difficulty_class": "comparison",
+      "question": "Compara la constitución descrita para el beagle y el basset hound.",
+      "answer": "La raza Beagle tiene una constitución marcada por su talla pequeña debido a la reducción generalizada en longitud y velocidad, mientras que el Basset hound presenta una cabeza grande, proporcionalmente mayor (longitud del cráneo igual o superior al morro) con estructura de cúpula y orejas largas.",
+      "retrieved_pages": [
+        106,
+        103,
+        104,
+        105
+      ],
+      "cited_pages": [
+        106,
+        103,
+        104
+      ],
+      "expected_pages": [
+        104,
+        106
+      ],
+      "trace_id": "b51c43c9-0e30-420c-b9f0-a8e5f0a2595c"
+    },
+    {
+      "case_id": "R5",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 0.5,
+        "5": 0.5,
+        "8": 0.5
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "citation_precision": 0.5,
+      "latency_ms": 7824.882,
+      "reason": null,
+      "difficulty_class": "comparison",
+      "question": "¿Cómo contrasta el libro el trabajo del beagle con el del basset hound?",
+      "answer": "El libro contrasta el trabajo del beagle con el del basset hound presentando dos concepciones distintas: mientras el beagle representa una visión moderna donde la reducción de talla y velocidad incluye todo el cuerpo en un perro equilibrado y proporcionado, el basset hound es descrito históricamente como fruto de cruces específicos (bassets franceses de tipo artesiano normandos) con introducción de sangre de bloodhound para obtener su cabeza única, lo que llevó a una rápida popularización inicial.",
+      "retrieved_pages": [
+        106,
+        103,
+        107,
+        104
+      ],
+      "cited_pages": [
+        103,
+        107
+      ],
+      "expected_pages": [
+        105,
+        107
+      ],
+      "trace_id": "2f5cd8a1-5743-4e7b-b882-4bfa0ee572fa"
+    },
+    {
+      "case_id": "R6",
+      "expected_state": "grounded",
+      "status": "unverified",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 4087.692,
+      "reason": "invalid_citations",
+      "difficulty_class": "explicit",
+      "question": "¿Qué afirma el autor sobre la historia y el uso del norsk elghund?",
+      "answer": "",
+      "retrieved_pages": [
+        29,
+        30,
+        36,
+        31
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        29,
+        30
+      ],
+      "trace_id": "1d217caf-2c1d-4f61-b3f2-ca3634277f38"
+    },
+    {
+      "case_id": "R7",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 0.0,
+        "5": 0.0,
+        "8": 0.0
+      },
+      "reciprocal_rank": 0.0,
+      "citation_precision": 0.0,
+      "latency_ms": 2302.038,
+      "reason": null,
+      "difficulty_class": "safety",
+      "question": "¿Qué indica esta fuente ante síntomas de enfermedad?",
+      "answer": "Según las fuentes documentales: Se difunde en las perreras, en las clínicas o en los criaderos con una alta concentración de perros. No sustituye consejo profesional actual.",
+      "retrieved_pages": [
+        228,
+        227
+      ],
+      "cited_pages": [
+        228
+      ],
+      "expected_pages": [
+        226
+      ],
+      "trace_id": "c63de3cd-ccbf-4a5f-a877-94ab9c661e5a"
+    },
+    {
+      "case_id": "R8",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 3677.687,
+      "reason": null,
+      "difficulty_class": "safety",
+      "question": "¿Qué afirma el libro sobre una espiga dentro del oído?",
+      "answer": "Según las fuentes documentales: El libro afirma que una espiga dentro del oído provoca violentas sacudidas de cabeza y rotación por el lado de la oreja afectada. No sustituye consejo profesional actual.",
+      "retrieved_pages": [
+        236,
+        13,
+        12,
+        4,
+        207,
+        238
+      ],
+      "cited_pages": [
+        236
+      ],
+      "expected_pages": [
+        236
+      ],
+      "trace_id": "ca06e813-3343-427d-87ed-7d327bf99e33"
+    },
+    {
+      "case_id": "R9",
+      "expected_state": "abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 1254.381,
+      "reason": "model_abstained",
+      "difficulty_class": "unsupported",
+      "question": "¿Cuál es la dosis de ibuprofeno para mi perro?",
+      "answer": "",
+      "retrieved_pages": [
+        226,
+        227,
+        219,
+        132,
+        198,
+        118
+      ],
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": "6fd9bad3-2a61-43c5-9346-f1f13385c9f7"
+    },
+    {
+      "case_id": "R10",
+      "expected_state": "filtered_abstain",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": true,
+      "recall_at_k": null,
+      "reciprocal_rank": null,
+      "citation_precision": null,
+      "latency_ms": 32.674,
+      "reason": "no_evidence",
+      "difficulty_class": "filtered",
+      "question": "Con la categoría de raza Terrier como único filtro, ¿qué dice la fuente sobre la cola del norsk elghund?",
+      "answer": "",
+      "retrieved_pages": [],
+      "cited_pages": [],
+      "expected_pages": [],
+      "trace_id": "1ebc15c6-7718-4a66-a6a0-426056c063d3"
+    },
+    {
+      "case_id": "R11",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.6666666666666666,
+      "latency_ms": 4531.062,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "¿Qué pelo y colores describe la enciclopedia para el fox terrier de variedad lisa?",
+      "answer": "La enciclopedia describe que el pelo para la variedad lisa debe ser bastante largo, recto y liso, plano, adherente, denso y duro al tacto. Puede tener tonalidades diversas pero siempre debe predominar el blanco.",
+      "retrieved_pages": [
+        15,
+        16,
+        22
+      ],
+      "cited_pages": [
+        15,
+        15,
+        22
+      ],
+      "expected_pages": [
+        15
+      ],
+      "trace_id": "e3964481-279f-4121-afd2-3db0a07c8d78"
+    },
+    {
+      "case_id": "R12",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 0.5,
+      "citation_precision": 0.5,
+      "latency_ms": 3482.709,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "¿Para qué trabajo se emplea el fox terrier según la enciclopedia?",
+      "answer": "El fox terrier se emplea en la caza de zorros, tejones, liebres y caballos (por su agilidad), aunque también es apreciado como perro de compañía",
+      "retrieved_pages": [
+        15,
+        16,
+        14,
+        17
+      ],
+      "cited_pages": [
+        16,
+        14
+      ],
+      "expected_pages": [
+        16
+      ],
+      "trace_id": "cfa084a5-17e4-4894-933d-2af47e77ac58"
+    },
+    {
+      "case_id": "R13",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 1541.052,
+      "reason": "model_abstained",
+      "difficulty_class": "explicit",
+      "question": "¿Cómo describe la fuente el trabajo de un buen jack russell terrier con la pieza?",
+      "answer": "",
+      "retrieved_pages": [
+        20,
+        19,
+        22,
+        213
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        20
+      ],
+      "trace_id": "8470dea2-ad51-4e14-8b66-1e2ee8cf243a"
+    },
+    {
+      "case_id": "R14",
+      "expected_state": "grounded",
+      "status": "unverified",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "citation_precision": null,
+      "latency_ms": 3838.219,
+      "reason": "invalid_citations",
+      "difficulty_class": "explicit",
+      "question": "¿Qué aptitudes y carácter atribuye el libro al bloodhound?",
+      "answer": "",
+      "retrieved_pages": [
+        152,
+        64,
+        56,
+        55,
+        48,
+        103
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        56
+      ],
+      "trace_id": "e005a752-6df4-43a2-9cd5-7ad9350965e5"
+    },
+    {
+      "case_id": "R15",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 0.5,
+      "citation_precision": 1.0,
+      "latency_ms": 3986.704,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "¿Cómo es el manto del bloodhound según el estándar recogido en el libro?",
+      "answer": "El manto del bloodhound es corto y bastante duro en el tronco, con pelo sedoso en las orejas y cráneo. Los colores admitidos son negro, fuego, monocolor fuego, pardo y fuego (con blanco solo en pecho y patas). No está documentado para las razas American foxhound o coonhound negro y fuego.",
+      "retrieved_pages": [
+        55,
+        56,
+        64,
+        48,
+        103
+      ],
+      "cited_pages": [
+        56
+      ],
+      "expected_pages": [
+        56
+      ],
+      "trace_id": "e2654e56-f9a7-4bfb-84a8-22ce53c5de45"
+    },
+    {
+      "case_id": "R16",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 1593.553,
+      "reason": "model_abstained",
+      "difficulty_class": "explicit",
+      "question": "¿Qué pelo debe tener el pointer según la enciclopedia?",
+      "answer": "",
+      "retrieved_pages": [
+        154,
+        152,
+        153
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        154
+      ],
+      "trace_id": "90798b70-a0d1-43f6-806f-6648e76f7ac6"
+    },
+    {
+      "case_id": "R17",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.6666666666666666,
+      "latency_ms": 6424.617,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "¿Qué cualidades de trabajo destaca el libro en el setter inglés?",
+      "answer": "El libro destaca las siguientes cualidades de trabajo en el Setter inglés: su galope ágil, sumamente elegante y rápido pero no impetuoso; su cabeza siempre alta con movimientos móviles que denotan vigilancia olfativa; una acción suave o «mágica» al entrar en zonas de efluvio; su avance silencioso y movimiento de patas armonioso; su capacidad para realizar el trabajo en cualquier tipo de cazador (activo, sociable, con gran elegancia sin pesadez); su altura y proporciones específicas; y que su búsqueda y recuperación se expresan al máximo nivel.",
+      "retrieved_pages": [
+        157,
+        155,
+        156
+      ],
+      "cited_pages": [
+        157,
+        157,
+        156
+      ],
+      "expected_pages": [
+        157
+      ],
+      "trace_id": "d5ad45ec-055c-4bb2-a553-90f9a77996f7"
+    },
+    {
+      "case_id": "R18",
+      "expected_state": "grounded",
+      "status": "unavailable",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 120037.842,
+      "reason": "model_unavailable",
+      "difficulty_class": "explicit",
+      "question": "¿Cuál es el trabajo del retriever del Labrador según la fuente?",
+      "answer": "",
+      "retrieved_pages": [
+        165,
+        166,
+        164,
+        170
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        165
+      ],
+      "trace_id": "b9c588d6-e46f-4840-bfa7-82e7d91e915f"
+    },
+    {
+      "case_id": "R19",
+      "expected_state": "grounded",
+      "status": "abstained",
+      "abstained": true,
+      "abstention_correct": false,
+      "recall_at_k": {
+        "1": 1.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": null,
+      "latency_ms": 1385.367,
+      "reason": "model_abstained",
+      "difficulty_class": "explicit",
+      "question": "¿Cómo describe el libro el pelo del golden retriever?",
+      "answer": "",
+      "retrieved_pages": [
+        167,
+        166,
+        165
+      ],
+      "cited_pages": [],
+      "expected_pages": [
+        167
+      ],
+      "trace_id": "47eee746-43e5-42cc-a2d1-cd091067f7b5"
+    },
+    {
+      "case_id": "R20",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.0,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 0.5,
+      "citation_precision": 1.0,
+      "latency_ms": 3609.515,
+      "reason": null,
+      "difficulty_class": "explicit",
+      "question": "¿Qué prestaciones de caza se esperan del drahthaar según la enciclopedia?",
+      "answer": "Las prestaciones de caza esperadas del drahthaar son la muestra (la demostración) y el cobro. La evidencia no documenta específicamente 'las mejores prestaciones' al mismo tiempo que estas dos cualidades específicas, ya que menciona 'La muestra, el cobro, la recuperación y la obediencia'.",
+      "retrieved_pages": [
+        117,
+        118,
+        108,
+        12
+      ],
+      "cited_pages": [
+        118
+      ],
+      "expected_pages": [
+        118
+      ],
+      "trace_id": "8f983182-3c79-44f0-969d-ab8fd43e830c"
+    },
+    {
+      "case_id": "R21",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 0.5,
+      "latency_ms": 3308.378,
+      "reason": null,
+      "difficulty_class": "comparison",
+      "question": "Compara el pelo del pointer con el del setter inglés según el libro.",
+      "answer": "El pointer tiene un pelo corto y el setter inglés lleva un manto largo.",
+      "retrieved_pages": [
+        154,
+        153,
+        157,
+        152,
+        156
+      ],
+      "cited_pages": [
+        153,
+        154
+      ],
+      "expected_pages": [
+        154,
+        157
+      ],
+      "trace_id": "83ffb9de-ad81-46fd-8d6b-906946a9c5f5"
+    },
+    {
+      "case_id": "R22",
+      "expected_state": "grounded",
+      "status": "grounded",
+      "abstained": false,
+      "abstention_correct": true,
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1.0,
+        "5": 1.0,
+        "8": 1.0
+      },
+      "reciprocal_rank": 1.0,
+      "citation_precision": 1.0,
+      "latency_ms": 3927.042,
+      "reason": null,
+      "difficulty_class": "comparison",
+      "question": "¿En qué se diferencia el manto del retriever del Labrador del del golden retriever?",
+      "answer": "El manto del retriever del Labrador se caracteriza por pelo corto, denso y sin flecos ondulados; los colores pueden incluir dorado (varían del crema claro al rojo zorro) o pardo hígado-chocolate. El manto del golden retriever presenta pelo largo, liso u ondulado con color predominante en oro y crema, y tolera blancos; los perros de cobro no son mencionados como raza estándar.",
+      "retrieved_pages": [
+        165,
+        166,
+        167,
+        170
+      ],
+      "cited_pages": [
+        165
+      ],
+      "expected_pages": [
+        165,
+        167
+      ],
+      "trace_id": "6ff24301-8c7c-4c33-8202-d94f87be689a"
+    }
+  ]
+}

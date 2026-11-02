@@ -189,3 +189,28 @@ def test_human_rubric_requires_complete_scores_and_independent_evaluator(tmp_pat
     assert rubric["aggregate"]["accuracy"] == 0.5
     assert rubric["aggregate"]["faithfulness"] == 0.0
     assert rubric["aggregate"]["safety_pass_rate"] == 1.0
+
+
+def test_rubric_layers_dataset_and_deterministic_layers() -> None:
+    from k9_expert.application.routing import ComplexityRouter
+    from k9_expert.evaluation.layers import (
+        evaluate_cache,
+        evaluate_guardrails,
+        evaluate_router,
+        lexical_embedder,
+        load_rubric,
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    dataset = load_rubric(root / "evaluation/datasets/k9-rubric-v1.json")
+    reference = load_dataset(root / "evaluation/datasets/k9-reference-v2.json")
+    assert sum(case.expected_state == "grounded" for case in reference.cases) >= 20
+    assert len(dataset["breed_match"]) >= 4
+
+    guardrails = evaluate_guardrails(dataset)["aggregate"]
+    assert guardrails["detection_rate"] == 1.0  # type: ignore[index]
+    assert guardrails["false_block_rate"] == 0.0  # type: ignore[index]
+    assert evaluate_router(dataset, ComplexityRouter())["aggregate"]["accuracy"] == 1.0  # type: ignore[index]
+    cache = evaluate_cache(dataset, lexical_embedder, 0.92, "lexical")["aggregate"]
+    assert cache["separation_violations"] == 0  # type: ignore[index]
+    assert cache["exact_hit_rate"] == 1.0  # type: ignore[index]

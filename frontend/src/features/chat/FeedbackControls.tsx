@@ -4,7 +4,8 @@ import { ErrorNotice } from '../../components/ErrorNotice'
 
 export const COMMENT_LIMIT = 1000
 
-export function FeedbackControls({ answerId }: { answerId: string }) {
+/** Rates a chat answer or, with `analysisId`, a stored BreedMatch report. */
+export function FeedbackControls({ answerId, analysisId }: { answerId?: string; analysisId?: string }) {
   const api = useApi()
   const commentId = useId()
   const [useful, setUseful] = useState<boolean | null>(null)
@@ -18,7 +19,9 @@ export function FeedbackControls({ answerId }: { answerId: string }) {
     setState('sending')
     setError(null)
     try {
-      await api.submitFeedback(answerId, useful, comment.trim() || null)
+      const text = comment.trim() || null
+      if (analysisId) await api.submitAnalysisFeedback(analysisId, useful, text)
+      else if (answerId) await api.submitFeedback(answerId, useful, text)
       setState('sent')
     } catch (reason) {
       setError(reason)
@@ -35,7 +38,7 @@ export function FeedbackControls({ answerId }: { answerId: string }) {
   }
 
   return (
-    <form className="feedback" onSubmit={submit} aria-label="Valorar respuesta">
+    <form className="feedback" onSubmit={submit} aria-label={analysisId ? 'Valorar análisis' : 'Valorar respuesta'}>
       <fieldset>
         <legend className="section-label">¿Le resultó útil?</legend>
         <div className="button-row">

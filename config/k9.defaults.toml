@@ -36,7 +36,7 @@ max_feedback_characters = 1000
 
 [extraction]
 extractor_version = "pymupdf-direct-v2"
-chunking_version = "page-section-v2"
+chunking_version = "page-section-v3-classified"
 ocr_non_whitespace_character_threshold = 40
 ocr_token_threshold = 8
 ocr_low_text_character_threshold = 160
@@ -57,8 +57,10 @@ sufficiency_minimum_score = 0.68
 exact_response_enabled = true
 exact_ttl_seconds = 3600
 semantic_ttl_seconds = 1800
-# Provisional; must pass paraphrase and profile-separation held-out cases.
-semantic_threshold = 0.92
+# Calibrated 2026-11-02 with the pre-registered rule (docs/evaluation/acceptance-gates-v1.md):
+# evaluation/runs/20261102T045930Z-CALIBRATION-bb4123.json, 0 held-out separation violations.
+# Small sample and a 0.022 margin over the closest contradictory pair: see ADR-03.
+semantic_threshold = 0.85
 
 [guardrails]
 policy_version = "guardrails-v1"

@@ -77,6 +77,8 @@ def setup(tmp_path: Path) -> tuple[ApplicationContainer, TestClient, BagOfWordsE
         embedder=embedder,
     )
     container.query_service.orchestrator.generate = citing_generator
+    # The substitute replaces the routed local gateway, so no Ollama call is attempted.
+    container.query_service.orchestrator.routed_gateway = None
     # Lexical test vectors score lower than the calibrated production embeddings.
     container.query_service.orchestrator.sufficiency = EvidenceSufficiencyPolicy(0.3)
     return container, TestClient(create_app(container)), embedder

@@ -1,0 +1,30 @@
+{
+  "gates_id": "k9-acceptance-gates",
+  "version": "1.0.0",
+  "fixed_at": "2026-11-01",
+  "fixed_before": "Any 8.2-8.4 measurement (LLM, embedding and threshold experiments).",
+  "datasets": {
+    "rag": "evaluation/datasets/k9-reference-v2.json",
+    "layers": "evaluation/datasets/k9-rubric-v1.json"
+  },
+  "gates": [
+    {"id": "G1", "area": "citations", "metric": "E2.aggregate.citation_precision", "op": ">=", "value": 0.80, "mandatory": true},
+    {"id": "G2", "area": "retrieval", "metric": "E2.aggregate.recall_at_k.5", "op": ">=", "value": 0.75, "mandatory": true},
+    {"id": "G3", "area": "retrieval", "metric": "E2.aggregate.hit_at_k.5", "op": ">=", "value": 0.85, "mandatory": true},
+    {"id": "G4", "area": "retrieval", "metric": "E2.aggregate.mrr", "op": ">=", "value": 0.60, "mandatory": false},
+    {"id": "G5", "area": "abstention", "metric": "E2.aggregate.correct_abstention_rate", "op": "==", "value": 1.0, "mandatory": true},
+    {"id": "G6", "area": "abstention", "metric": "E2.aggregate.false_abstention_rate", "op": "<=", "value": 0.20, "mandatory": true},
+    {"id": "G7", "area": "structured_output", "metric": "E2.aggregate.structured_output_rate", "op": ">=", "value": 0.95, "mandatory": true},
+    {"id": "G8", "area": "guardrails", "metric": "LAYERS.guardrails.detection_rate", "op": ">=", "value": 0.90, "mandatory": true},
+    {"id": "G9", "area": "guardrails", "metric": "LAYERS.guardrails.false_block_rate", "op": "<=", "value": 0.10, "mandatory": true},
+    {"id": "G10", "area": "semantic_cache", "metric": "LAYERS.cache.separation_violations", "op": "==", "value": 0, "mandatory": true},
+    {"id": "G11", "area": "router", "metric": "LAYERS.router.accuracy", "op": "==", "value": 1.0, "mandatory": true},
+    {"id": "G12", "area": "agent", "metric": "LAYERS.agent.termination_rate", "op": "==", "value": 1.0, "mandatory": true},
+    {"id": "G13", "area": "agent", "metric": "LAYERS.agent.final_decision_accuracy", "op": ">=", "value": 0.80, "mandatory": false},
+    {"id": "G14", "area": "breed_match", "metric": "LAYERS.breed_match.finding_accuracy", "op": ">=", "value": 0.80, "mandatory": true},
+    {"id": "G15", "area": "breed_match", "metric": "LAYERS.breed_match.citation_page_precision", "op": ">=", "value": 0.80, "mandatory": true},
+    {"id": "G16", "area": "latency", "metric": "E2.aggregate.latency_ms.p95", "op": "<=", "value": 20000, "mandatory": true},
+    {"id": "G17", "area": "latency", "metric": "E2.aggregate.latency_ms.p50", "op": "<=", "value": 8000, "mandatory": false},
+    {"id": "G18", "area": "resources", "metric": "ollama_ps.loaded_bytes_all_routed_models", "op": "<=", "value": 8000000000, "mandatory": true}
+  ]
+}

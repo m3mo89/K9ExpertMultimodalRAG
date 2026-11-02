@@ -1,5 +1,8 @@
 import type {
   AdminCredentials,
+  AnalysisFeedback,
+  BreedAnalysisRequest,
+  BreedAnalysisResponse,
   CitationDetail,
   Confirmation,
   Conversation,
@@ -10,6 +13,7 @@ import type {
   Feedback,
   HealthReport,
   Job,
+  ModelConfiguration,
   OperationalMetrics,
   PageEvidence,
   PublicationResult,
@@ -117,6 +121,20 @@ export class ApiClient {
       method: 'POST',
       body: { useful, comment },
     })
+  submitBreedAnalysis = (analysis: BreedAnalysisRequest, signal?: AbortSignal) =>
+    this.request<BreedAnalysisResponse>('/breed-analyses', {
+      method: 'POST',
+      body: analysis,
+      signal,
+    })
+  breedAnalysis = (id: string) =>
+    this.request<BreedAnalysisResponse>(`/breed-analyses/${encodeURIComponent(id)}`)
+  submitAnalysisFeedback = (analysisId: string, useful: boolean, comment: string | null) =>
+    this.request<AnalysisFeedback>(`/breed-analyses/${encodeURIComponent(analysisId)}/feedback`, {
+      method: 'POST',
+      body: { useful, comment },
+    })
+  configuration = () => this.request<ModelConfiguration>('/configuration')
   listDocuments = () => this.request<DocumentSummary[]>('/documents')
   listVersions = (documentId: string) =>
     this.request<DocumentVersion[]>(`/documents/${encodeURIComponent(documentId)}/versions`)

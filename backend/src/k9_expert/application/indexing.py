@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from uuid import UUID
 
 from k9_expert.application.query import QueryRequest, SemanticRetriever
+from k9_expert.domain.breed_vocabulary import BreedClassification, validate_classification
 from k9_expert.domain.models import (
     DocumentId,
     DocumentVersionId,
@@ -117,6 +119,17 @@ def metadata_filter(filters: QueryFilters) -> dict[str, object] | None:
 
 
 def _record(snapshot_id: str, row: sqlite3.Row, vector: tuple[float, ...]) -> VectorRecord:
+    if row["policy_version"] is not None:
+        validate_classification(
+            BreedClassification(
+                breed=row["breed"],
+                breed_group=row["breed_group"],
+                hunting_functions=tuple(json.loads(str(row["hunting_functions_json"]))),
+                section=row["section"],
+                provenance=tuple(json.loads(str(row["provenance_json"]))),
+                policy_version=str(row["policy_version"]),
+            )
+        )
     return VectorRecord(
         fragment_id=str(row["id"]),
         text=str(row["text"]),
@@ -126,7 +139,10 @@ def _record(snapshot_id: str, row: sqlite3.Row, vector: tuple[float, ...]) -> Ve
         version_id=str(row["version_id"]),
         physical_page=int(row["page_start"]),
         category=row["category"],
-        section=row["section_path"] or None,
+        breed=row["breed"],
+        breed_group=row["breed_group"],
+        hunting_functions=row["hunting_functions_json"],
+        section=row["section"] or row["section_path"] or None,
     )
 
 

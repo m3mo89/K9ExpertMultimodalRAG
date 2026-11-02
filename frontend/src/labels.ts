@@ -1,5 +1,13 @@
 import { ApiError } from './api/client'
-import type { ComponentState, JobStage, QueryStatus, SourceStatus } from './api/types'
+import type {
+  AnalysisStatus,
+  ComponentState,
+  CriterionKey,
+  FindingOutcome,
+  JobStage,
+  QueryStatus,
+  SourceStatus,
+} from './api/types'
 
 export const queryStatusLabels: Record<QueryStatus, string> = {
   grounded: 'Respuesta fundamentada',
@@ -7,6 +15,34 @@ export const queryStatusLabels: Record<QueryStatus, string> = {
   rejected: 'Consulta rechazada',
   unverified: 'Respuesta no verificable',
   unavailable: 'Servicio no disponible',
+}
+
+export const analysisStatusLabels: Record<AnalysisStatus, string> = {
+  completed: 'Análisis completo',
+  partial: 'Análisis parcial',
+  abstained: 'Sin evidencia suficiente',
+  rejected: 'Criterios rechazados',
+  unavailable: 'Servicio no disponible',
+}
+
+export const findingOutcomeLabels: Record<FindingOutcome, string> = {
+  match: 'Coincide',
+  mismatch: 'No coincide',
+  not_documented: 'No documentado',
+}
+
+export const criterionLabels: Record<CriterionKey, string> = {
+  hunting_function: 'Función de caza',
+  size: 'Tamaño',
+  morphology: 'Morfología',
+  coat: 'Manto',
+  work_aptitude: 'Aptitud de trabajo',
+}
+
+export const cacheLabels: Record<string, string> = {
+  miss: 'Sin caché',
+  exact: 'Caché exacta',
+  semantic: 'Caché semántica',
 }
 
 export const sourceStatusLabels: Record<SourceStatus, string> = {
@@ -85,6 +121,15 @@ const reasonMessages: Record<string, string> = {
   invalid_citations: 'La respuesta generada no pudo verificarse contra la evidencia.',
   model_output_invalid: 'El modelo devolvió una respuesta no verificable.',
   model_unavailable: 'El modelo local no está disponible. Inténtelo de nuevo.',
+  input_bounds_invalid: 'Los criterios están vacíos o superan la longitud permitida.',
+  prompt_injection_detected: 'Los criterios contienen instrucciones no permitidas.',
+  sensitive_data_detected: 'Los criterios contienen datos personales; elimínelos.',
+  criteria_required: 'Indique al menos un criterio.',
+  criterion_not_supported: 'Uno de los criterios no está admitido.',
+  criterion_invalid: 'Uno de los criterios no es válido.',
+  no_candidates: 'La biblioteca activa no documenta razas candidatas.',
+  citation_not_allowed: 'Un hallazgo cita evidencia no verificable.',
+  citation_required: 'Un hallazgo carece de cita.',
 }
 
 export function reasonMessage(reason: string | null): string | null {

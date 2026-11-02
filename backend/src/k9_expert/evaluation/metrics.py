@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from statistics import fmean
 
 ABSTAINING_STATES = frozenset({"abstained", "rejected", "unavailable", "unverified"})
+# Outcomes that prove the model was called: a draft was returned and checked.
+MODEL_CALL_REASONS = frozenset({"model_abstained", "invalid_citations", "model_output_invalid"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ class CaseMetrics:
     reciprocal_rank: float | None
     citation_precision: float | None
     latency_ms: float
+    reason: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -82,6 +85,7 @@ def evaluate_case(
             citation_precision(observation.cited_pages, expected_pages) if expected_pages else None
         ),
         latency_ms=observation.latency_ms,
+        reason=observation.reason,
     )
 
 
@@ -92,10 +96,20 @@ def aggregate(cases: Sequence[CaseMetrics]) -> dict[str, object]:
     should_answer = [case for case in cases if case.expected_state == "grounded"]
     latencies = sorted(case.latency_ms for case in cases)
     ks = sorted({k for case in retrieval for k in (case.recall_at_k or {})})
+    called = [
+        case for case in cases
+        if case.status == "grounded" or case.reason in MODEL_CALL_REASONS
+    ]
     return {
         "cases": len(cases),
         "recall_at_k": {
             k: fmean((case.recall_at_k or {})[k] for case in retrieval) for k in ks
+        }
+        if retrieval
+        else None,
+        # Hit@K: at least one expected page in the top K (recall > 0).
+        "hit_at_k": {
+            k: fmean(bool((case.recall_at_k or {})[k]) for case in retrieval) for k in ks
         }
         if retrieval
         else None,
@@ -104,6 +118,11 @@ def aggregate(cases: Sequence[CaseMetrics]) -> dict[str, object]:
         if cited
         else None,
         "grounded_cases_with_citations": len(cited),
+        "structured_output_rate": fmean(
+            case.status == "grounded" or case.reason == "model_abstained" for case in called
+        )
+        if called
+        else None,
         "abstention_accuracy": fmean(case.abstention_correct for case in cases) if cases else None,
         "correct_abstention_rate": fmean(case.abstained for case in should_abstain)
         if should_abstain

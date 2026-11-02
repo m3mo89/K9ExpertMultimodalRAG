@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from k9_expert.application.generation import (
@@ -14,6 +15,7 @@ from k9_expert.application.generation import (
 from k9_expert.application.observability import TraceRecorder
 from k9_expert.domain.errors import DomainError
 from k9_expert.domain.models import (
+    CacheHitType,
     Citation,
     Evidence,
     QueryFilters,
@@ -22,7 +24,12 @@ from k9_expert.domain.models import (
     QueryStatus,
     SnapshotId,
 )
-from k9_expert.ports.interfaces import TraceSink
+from k9_expert.ports.interfaces import InputGuardrail, TraceSink
+
+if TYPE_CHECKING:
+    from k9_expert.application.breed_analysis import NarrativeGateway
+    from k9_expert.application.response_cache import QueryResponseCache
+    from k9_expert.application.routing import ComplexityRouter
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +147,17 @@ class QueryOrchestrator:
         resolved_model: Callable[[], str | None] = lambda: None,
         retrieval_config: Mapping[str, object] | None = None,
         sufficiency: EvidenceSufficiencyPolicy | None = None,
+        response_cache: QueryResponseCache | None = None,
+        input_guardrails: InputGuardrail | None = None,
+        reformulate: Callable[[str, list[Evidence]], str] | None = None,
+        agent_max_iterations: int = 2,
+        model_router: ComplexityRouter | None = None,
+        routed_gateway: NarrativeGateway | None = None,
     ) -> None:
+        # With a router and routed gateway, `generate` is unused: aliases resolve per request.
         self.generate = generate
+        self.model_router = model_router
+        self.routed_gateway = routed_gateway
         self.sufficiency = sufficiency or EvidenceSufficiencyPolicy()
         self.retrieve = retrieve
         self.sink = sink
@@ -149,11 +165,16 @@ class QueryOrchestrator:
         self.resolved_model = resolved_model
         self.retrieval_config = dict(retrieval_config or {})
         self.cache: dict[tuple[str, str, QueryFilters], QueryResult] = {}
+        self.response_cache = response_cache
+        self.input_guardrails = input_guardrails
+        self.reformulate = reformulate
+        self.agent_max_iterations = max(1, agent_max_iterations)
 
     def run(self, request: QueryRequest, snapshot_id: str | None) -> QueryResult:
         query_id = QueryId(uuid4())
         trace = TraceRecorder("query")
         trace.set(
+            operation="grounded_query",
             query_id=str(query_id),
             snapshot_id=snapshot_id,
             prompt_version=PROMPT_VERSION,
@@ -201,32 +222,90 @@ class QueryOrchestrator:
         if policy.status is not None:
             return policy.status, "", policy.reason, (), False
         assert snapshot_id is not None
+        if self.input_guardrails is not None:
+            with trace.stage("input_guardrails"):
+                guard = self.input_guardrails.evaluate(request.text)
+            trace.set(input_guardrail={"action": str(guard.action), "reason": guard.reason})
+            if str(guard.action) != "allow":
+                return QueryStatus.REJECTED, "", guard.reason, (), False
         key = (snapshot_id, request.text, request.filters)
         with trace.stage("cache"):
-            cached = self.cache.get(key)
+            persistent = (
+                self.response_cache.get(request, snapshot_id) if self.response_cache else None
+            )
+            cached = persistent or self.cache.get(key)
         if cached is not None:
-            trace.set(cache_hit=True)
+            trace.set(
+                cache_hit=True,
+                cache_type=str(persistent.hit_type) if persistent else "exact-memory",
+                cache_similarity=persistent.similarity if persistent else None,
+            )
             return cached.status, cached.answer, cached.reason, cached.citations, cached.discrepancy
+        trace.set(cache_type="miss")
         with trace.stage("route"):
             route = DomainRouter().route(request.text)
-        trace.set(route=route)
-        with trace.stage("retrieval"):
-            evidence = self.retrieve(replace(request, snapshot_id=snapshot_id))
+        trace.set(route=route, domain_route=route)
+        evidence: list[Evidence] = []
+        active_request = replace(request, snapshot_id=snapshot_id)
+        agent_decisions: list[dict[str, object]] = []
+        for iteration in range(1, self.agent_max_iterations + 1):
+            retrieval_stage = "retrieval" if iteration == 1 else f"retrieval_{iteration}"
+            sufficiency_stage = "sufficiency" if iteration == 1 else f"sufficiency_{iteration}"
+            with trace.stage(retrieval_stage):
+                evidence = self.retrieve(active_request)
+            with trace.stage(sufficiency_stage):
+                sufficient = self.sufficiency.evaluate(evidence, route)
+            agent_decisions.append({
+                "iteration": iteration, "evidence_count": len(evidence),
+                "decision": "generate" if sufficient.status is None else "insufficient",
+                "reason": sufficient.reason,
+            })
+            if sufficient.status is None:
+                break
+            if self.reformulate is None or iteration == self.agent_max_iterations:
+                trace.set(agent_iterations=iteration, agent_decisions=agent_decisions)
+                return sufficient.status, "", sufficient.reason, (), False
+            with trace.stage("reformulation"):
+                rewritten = self.reformulate(active_request.text, evidence)
+            active_request = replace(active_request, text=rewritten)
+        trace.set(agent_iterations=len(agent_decisions), agent_decisions=agent_decisions)
         trace.set(
             evidence=[
                 {"fragment_id": str(item.fragment_id), "score": round(item.score, 6)}
                 for item in evidence
             ]
         )
-        with trace.stage("sufficiency"):
-            sufficient = self.sufficiency.evaluate(evidence, route)
-        if sufficient.status is not None:
-            return sufficient.status, "", sufficient.reason, (), False
-        system, prompt = PromptBuilder().build(request.text, evidence)
+        system, prompt = PromptBuilder().build(active_request.text, evidence)
         trace.set(generation_called=True)
-        with trace.stage("generation"):
-            draft: GeneratedAnswer = self.generate(system, prompt)
-        trace.set(resolved_model=self.resolved_model())
+        draft: GeneratedAnswer
+        if self.model_router is not None and self.routed_gateway is not None:
+            decision = self.model_router.route({
+                "evidence_count": len(evidence),
+                "reformulated": len(agent_decisions) > 1,
+            })
+            trace.set(model_route=decision.alias, route_reason=decision.reason,
+                      router_policy=decision.policy_version)
+            first_attempt = len(self.routed_gateway.attempts)
+            try:
+                with trace.stage("generation"):
+                    draft = self.routed_gateway.generate(decision.alias, system, prompt)
+            finally:
+                attempts = self.routed_gateway.attempts[first_attempt:]
+                success = next((item for item in attempts if item.outcome == "success"), None)
+                trace.set(
+                    gateway_attempts=[
+                        {"alias": item.alias, "model": item.model, "outcome": item.outcome}
+                        for item in attempts
+                    ],
+                    resolved_model=(
+                        self.routed_gateway.resolved_model(success.alias) if success else None
+                    ),
+                    fallback_used=success is not None and success.alias != decision.alias,
+                )
+        else:
+            with trace.stage("generation"):
+                draft = self.generate(system, prompt)
+            trace.set(resolved_model=self.resolved_model())
         with trace.stage("verification"):
             status = verify_answer(draft, evidence, {str(item.fragment_id) for item in evidence})
         cited_ids = set(draft.evidence_ids) if status == QueryStatus.GROUNDED else set()
@@ -254,6 +333,14 @@ class QueryOrchestrator:
             citations,
             discrepancy=discrepancy,
         )
+        if self.response_cache is not None:
+            from k9_expert.application.response_cache import CachedQuery
+
+            self.response_cache.store(
+                request,
+                snapshot_id,
+                CachedQuery(status, answer, None, citations, discrepancy, CacheHitType.MISS),
+            )
         return status, answer, None, citations, discrepancy
 
 

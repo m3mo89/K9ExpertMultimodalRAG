@@ -19,6 +19,8 @@ class VectorRecord:
     physical_page: int
     category: str | None = None
     breed: str | None = None
+    breed_group: str | None = None
+    hunting_functions: str | None = None
     section: str | None = None
 
     def metadata(self) -> dict[str, str | int]:
@@ -31,6 +33,8 @@ class VectorRecord:
         optional_metadata = (
             ("category", self.category),
             ("breed", self.breed),
+            ("breed_group", self.breed_group),
+            ("hunting_functions", self.hunting_functions),
             ("section", self.section),
         )
         for name, value in optional_metadata:
@@ -128,6 +132,10 @@ class ChromaGenerationIndex:
                 physical_page=int(str(data["physical_page"])),
                 category=str(data["category"]) if "category" in data else None,
                 breed=str(data["breed"]) if "breed" in data else None,
+                breed_group=str(data["breed_group"]) if "breed_group" in data else None,
+                hunting_functions=(
+                    str(data["hunting_functions"]) if "hunting_functions" in data else None
+                ),
                 section=str(data["section"]) if "section" in data else None,
             )
             for fragment_id, document, vector, data in zip(

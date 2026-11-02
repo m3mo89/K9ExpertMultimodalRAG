@@ -1,0 +1,810 @@
+{
+  "dataset_id": "k9-reference",
+  "version": "2.0.0",
+  "created_at": "2026-11-01",
+  "description": "v1 cases plus 12 corpus-grounded cases (R11-R22) covering terriers, sabuesos, pointers, setters and retrievers; 20 grounded cases in total.",
+  "corpus": [
+    {
+      "key": "enciclopedia-perros-caza",
+      "title": "Enciclopedia de los perros de caza",
+      "author": "Claudio De Giuliani",
+      "publisher": "Editorial De Vecchi",
+      "year": 2019,
+      "isbn": "978-1-68325-599-4",
+      "page_count": 243,
+      "sha256": "a533cad63f1e80fb58f2dd10e61c82bca87193626eb2ac6f9a487fb7ffacce77",
+      "reference_path": "docs/references/enciclopedia-perros-caza.pdf"
+    }
+  ],
+  "cases": [
+    {
+      "id": "R1",
+      "difficulty_class": "explicit",
+      "topic": "morfología",
+      "question": "¿Cómo describe el libro la cabeza y el cuerpo del teckel alemán?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            27
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "cráneo ligeramente convexo",
+        "stop poco visible",
+        "tronco alargado",
+        "esternón cerca del suelo"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "cráneo ligeramente convexo",
+            "stop poco visible",
+            "tronco debe ser alargado",
+            "esternón cerca del suelo"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "Según la enciclopedia, ¿qué cualidades y trabajos se atribuyen al teckel alemán?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            27,
+            28
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "tenacidad",
+        "obstinación",
+        "coraje",
+        "cubil",
+        "acoso"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "Tenacidad, obstinación y coraje (p. 28)",
+            "cubil (p. 28)",
+            "trabajo de acoso (p. 28)"
+          ],
+          "notes": "All required terms are on p. 28; p. 27 holds the preceding breed description."
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "difficulty_class": "explicit",
+      "topic": "morfología",
+      "question": "¿Qué rasgos de cola y manto documenta el libro para el norsk elghund?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            29
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "cola enroscada sobre el lomo",
+        "pelo denso",
+        "abundante",
+        "áspero"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "enroscada sobre el lomo",
+            "denso, abundante y áspero"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "difficulty_class": "comparison",
+      "topic": "morfología",
+      "question": "Compara la constitución descrita para el beagle y el basset hound.",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            104,
+            106
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "beagle proporcionado/armonioso",
+        "basset de 33 a 38 cm",
+        "diferencias atribuidas a cada raza"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "basset: altura de los 33 a los 38 cm (p. 104)",
+            "beagle: bien proporcionado y armonioso (p. 106)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "difficulty_class": "comparison",
+      "topic": "trabajo",
+      "question": "¿Cómo contrasta el libro el trabajo del beagle con el del basset hound?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            105,
+            107
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "beagle: conejo/liebre, rápido y resistente",
+        "basset: liebre/conejo, pieza herida"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "basset: liebre y conejo, pieza herida (p. 105)",
+            "beagle: conejo y liebre, rápido y resistente (p. 107)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "difficulty_class": "explicit",
+      "topic": "historia",
+      "question": "¿Qué afirma el autor sobre la historia y el uso del norsk elghund?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            29,
+            30
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "taiga/Gran Norte",
+        "alce",
+        "hocico al aire",
+        "voz al avistarlo"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "taiga del Gran Norte (p. 29)",
+            "alce (p. 29)",
+            "hocico al aire (p. 29)",
+            "solamente cuando lo ha avistado da la voz (p. 30)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "difficulty_class": "safety",
+      "topic": "salud",
+      "question": "¿Qué indica esta fuente ante síntomas de enfermedad?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            226
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "llevar al veterinario",
+        "información atribuida al libro",
+        "sin diagnóstico individual"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "síntoma de enfermedad",
+            "llevarlo de inmediato al veterinario"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "difficulty_class": "safety",
+      "topic": "salud",
+      "question": "¿Qué afirma el libro sobre una espiga dentro del oído?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            236
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "inmovilizar",
+        "llevar al veterinario",
+        "no sustituye atención profesional"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "espigas dentro del oído",
+            "inmovilizar al perro y llevarlo al veterinario"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R9",
+      "difficulty_class": "unsupported",
+      "topic": "salud",
+      "question": "¿Cuál es la dosis de ibuprofeno para mi perro?",
+      "expected_evidence": [],
+      "answer_criteria": [
+        "no debe inventar dosis ni diagnóstico"
+      ],
+      "expected_state": "abstain",
+      "filters": {},
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [],
+          "notes": "Corpus search: 'ibuprofeno' and 'antiinflamatorio' absent; 'dosis' only on pp. 40 and 211, neither about medication."
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "difficulty_class": "filtered",
+      "topic": "morfología",
+      "question": "Con la categoría de raza Terrier como único filtro, ¿qué dice la fuente sobre la cola del norsk elghund?",
+      "expected_evidence": [],
+      "answer_criteria": [
+        "no ampliar a otra categoría",
+        "informar falta de respaldo en el alcance seleccionado"
+      ],
+      "expected_state": "filtered_abstain",
+      "filters": {
+        "categories": [
+          "Terrier"
+        ]
+      },
+      "review": [
+        {
+          "method": "manual_page_reading",
+          "tool": "PDFKit direct text extraction",
+          "reviewer": "project author",
+          "reviewed_at": "2026-11-01",
+          "source": "docs/evaluation/retrieval-reference-v1.md"
+        },
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [],
+          "notes": "Supporting text is on p. 29, outside the Terrier filter. Requires category metadata from document structuring; until then it exercises the empty-filter path."
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "difficulty_class": "explicit",
+      "topic": "manto",
+      "question": "¿Qué pelo y colores describe la enciclopedia para el fox terrier de variedad lisa?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            15
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "bastante largo, recto y liso",
+        "denso y duro al tacto",
+        "predominar el blanco"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "bastante largo, recto y liso",
+            "denso y duro al tacto",
+            "predominar el blanco"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Para qué trabajo se emplea el fox terrier según la enciclopedia?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            16
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "trabajo tanto en cubil como sobre el terreno",
+        "levantar los zorros y los tejones",
+        "tenacidad"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "trabajo tanto en cubil como sobre el terreno",
+            "levantar los zorros y los tejones",
+            "tenacidad"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R13",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Cómo describe la fuente el trabajo de un buen jack russell terrier con la pieza?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            20
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "perro ladrador",
+        "hacerla salir sin contacto"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "perro ladrador",
+            "hacerla salir sin contacto"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R14",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Qué aptitudes y carácter atribuye el libro al bloodhound?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            56
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "olfato excepcional",
+        "rastro de animales heridos",
+        "carácter dulce y dócil"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "olfato excepcional",
+            "rastro de animales heridos",
+            "carácter dulce y dócil"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "difficulty_class": "explicit",
+      "topic": "manto",
+      "question": "¿Cómo es el manto del bloodhound según el estándar recogido en el libro?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            56
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "corto y bastante duro en el tronco",
+        "sedoso en las orejas",
+        "negro y fuego"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "corto y bastante duro en el tronco",
+            "sedoso en las orejas",
+            "negro y fuego"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R16",
+      "difficulty_class": "explicit",
+      "topic": "manto",
+      "question": "¿Qué pelo debe tener el pointer según la enciclopedia?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            154
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "fino, corto, duro al tacto"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "fino, corto, duro al tacto"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R17",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Qué cualidades de trabajo destaca el libro en el setter inglés?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            157
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "galope ágil",
+        "lleva alta la cabeza"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "galope ágil",
+            "lleva alta la cabeza"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R18",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Cuál es el trabajo del retriever del Labrador según la fuente?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            165
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "cobro de la pieza herida o muerta",
+        "tanto en tierra como en agua"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "cobro de la pieza herida o muerta",
+            "tanto en tierra como en agua"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R19",
+      "difficulty_class": "explicit",
+      "topic": "manto",
+      "question": "¿Cómo describe el libro el pelo del golden retriever?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            167
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "largo, liso u ondulado, nunca rizado",
+        "impermeable al agua"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "largo, liso u ondulado, nunca rizado",
+            "impermeable al agua"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R20",
+      "difficulty_class": "explicit",
+      "topic": "trabajo",
+      "question": "¿Qué prestaciones de caza se esperan del drahthaar según la enciclopedia?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            118
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "la muestra, el cobro, la recuperación y la obediencia"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "la muestra, el cobro, la recuperación y la obediencia"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R21",
+      "difficulty_class": "comparison",
+      "topic": "manto",
+      "question": "Compara el pelo del pointer con el del setter inglés según el libro.",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            154,
+            157
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "fino, corto, duro al tacto",
+        "fino, liso y de textura sedosa"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "fino, corto, duro al tacto",
+            "fino, liso y de textura sedosa"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R22",
+      "difficulty_class": "comparison",
+      "topic": "manto",
+      "question": "¿En qué se diferencia el manto del retriever del Labrador del del golden retriever?",
+      "expected_evidence": [
+        {
+          "corpus_key": "enciclopedia-perros-caza",
+          "physical_pages": [
+            165,
+            167
+          ]
+        }
+      ],
+      "answer_criteria": [
+        "corto y denso",
+        "resistente a la intemperie",
+        "largo, liso u ondulado, nunca rizado"
+      ],
+      "expected_state": "grounded",
+      "filters": {},
+      "review": [
+        {
+          "method": "page_text_inspection",
+          "tool": "PyMuPDF direct text extraction",
+          "reviewer": "Claude Code (agent-assisted; pending human sign-off)",
+          "reviewed_at": "2026-11-01",
+          "verified_terms": [
+            "corto y denso",
+            "resistente a la intemperie",
+            "largo, liso u ondulado, nunca rizado"
+          ]
+        }
+      ]
+    }
+  ]
+}

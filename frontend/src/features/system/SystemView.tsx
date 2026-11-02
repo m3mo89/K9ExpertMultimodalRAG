@@ -3,6 +3,7 @@ import { useAdmin, useApi } from '../../api/hooks'
 import type {
   AdminCredentials,
   ComponentState,
+  LayerMetrics,
   OperationalMetrics,
   RecentTraceMetrics,
 } from '../../api/types'
@@ -10,6 +11,8 @@ import { ErrorNotice } from '../../components/ErrorNotice'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAsync } from '../../hooks'
 import {
+  analysisStatusLabels,
+  cacheLabels,
   componentLabels,
   componentStateLabels,
   formatDate,
@@ -138,12 +141,40 @@ function Metrics({ admin }: { admin: AdminCredentials }) {
         </div>
       </dl>
       {data.recent && <RecentActivity recent={data.recent} />}
+      {data.recent?.layers && <LayerTables layers={data.recent.layers} />}
       <div className="table-grid">
         <CountTable caption="Consultas por resultado" counts={data.queries} labels={queryStatusLabels} />
         <CountTable caption="Documentos por estado" counts={data.documents} labels={sourceStatusLabels} />
         <CountTable caption="Trabajos de ingesta por etapa" counts={data.jobs} labels={jobStageLabels} />
       </div>
     </section>
+  )
+}
+
+function LayerTables({ layers }: { layers: LayerMetrics }) {
+  const latency = Object.fromEntries(
+    Object.entries(layers.latency_ms).map(([stage, value]) => [stage, value.count]),
+  )
+  return (
+    <>
+      <h3 className="section-label">Capas de ejecución de IA</h3>
+      <p className="small muted">
+        Respaldos locales usados: {layers.fallback_used}. Latencia p95 por capa:{' '}
+        {Object.entries(layers.latency_ms)
+          .map(([stage, value]) => `${stage} ${formatMs(value.p95)}`)
+          .join(' · ') || '—'}
+      </p>
+      <div className="table-grid">
+        <CountTable caption="Análisis de razas por resultado" counts={layers.breed_match_states} labels={analysisStatusLabels} />
+        <CountTable caption="Caché de análisis" counts={layers.cache.breed_analysis ?? {}} labels={cacheLabels} />
+        <CountTable caption="Caché de consultas" counts={layers.cache.query ?? {}} labels={cacheLabels} />
+        <CountTable caption="Rutas de modelo" counts={layers.routes} labels={{}} />
+        <CountTable caption="Modelos resueltos" counts={layers.resolved_models} labels={{}} />
+        <CountTable caption="Iteraciones del agente" counts={layers.agent_iterations} labels={{}} />
+        <CountTable caption="Decisiones de guardarraíles" counts={layers.guardrails} labels={{}} />
+        <CountTable caption="Ejecuciones por capa" counts={latency} labels={{}} />
+      </div>
+    </>
   )
 }
 

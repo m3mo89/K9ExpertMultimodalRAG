@@ -108,7 +108,7 @@ def test_new_records_are_backed_up_and_retention_is_additive(tmp_path) -> None:
     backup_db = data / "backups" / str(manifest["backup_id"]) / "k9.sqlite"
     backup = SqliteDatabase(backup_db)
     with backup.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
         tables = {
             row["name"]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { AdminView } from './features/admin/AdminView'
+import { BreedMatchView } from './features/breedmatch/BreedMatchView'
 import { ChatView } from './features/chat/ChatView'
 import { LibraryView } from './features/library/LibraryView'
 import { SystemView } from './features/system/SystemView'
 
+// BreedMatch is the primary product flow; chat, library and administration are secondary.
 const routes = [
+  { path: 'analizar', label: 'Análisis de razas', View: BreedMatchView },
   { path: 'consultar', label: 'Consultar', View: ChatView },
   { path: 'biblioteca', label: 'Biblioteca', View: LibraryView },
   { path: 'administracion', label: 'Administración', View: AdminView },
@@ -15,7 +18,7 @@ type RoutePath = (typeof routes)[number]['path']
 
 function currentRoute(): RoutePath {
   const path = window.location.hash.replace(/^#\/?/, '')
-  return routes.find((route) => route.path === path)?.path ?? 'consultar'
+  return routes.find((route) => route.path === path)?.path ?? 'analizar'
 }
 
 export default function App() {

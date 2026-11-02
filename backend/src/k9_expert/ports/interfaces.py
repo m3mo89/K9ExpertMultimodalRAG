@@ -96,6 +96,7 @@ class ResponseCache(Protocol):
         partition: str,
         snapshot_id: str,
         expires_at: str,
+        semantic_expires_at: str | None = None,
         request_vector: Sequence[float] | None = None,
     ) -> None: ...
 

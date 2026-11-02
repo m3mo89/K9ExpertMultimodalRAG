@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { mockApi } from './mockApi.ts'
 
 const views = [
+  { hash: '#/analizar', heading: 'Análisis de razas' },
   { hash: '#/consultar', heading: 'Consultar la biblioteca' },
   { hash: '#/biblioteca', heading: 'Biblioteca de conocimiento' },
   { hash: '#/administracion', heading: 'Administración' },
@@ -39,6 +40,27 @@ test('navigation links are reachable touch targets', async ({ page }) => {
     const box = await link.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(44)
   }
+})
+
+test('the default view completes a BreedMatch analysis without chat', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(new URL(request.url()).pathname))
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1, name: 'Análisis de razas' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Análisis de razas' })).toHaveAttribute('aria-current', 'page')
+  await page.getByLabel('Valor del criterio 1').fill('rastro')
+  await page.getByRole('button', { name: 'Analizar razas' }).click()
+  const report = page.getByRole('region', { name: 'Informe de análisis' })
+  await expect(report.getByRole('table', { name: 'Comparación por criterio' })).toBeVisible()
+  await expect(report.getByText('No documentado').first()).toBeVisible()
+  await report.getByText('Teckel alemán', { exact: true }).last().click()
+  await expect(report.getByText(/pág\. 40 \(PDF 42\)/)).toBeVisible()
+  await report.getByRole('button', { name: 'Útil', exact: true }).click()
+  await report.getByRole('button', { name: 'Enviar valoración' }).click()
+  await expect(report.getByText(/su valoración quedó registrada/)).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await expectAccessible(page)
+  expect(requests.filter((path) => /\/api\/v1\/(queries|conversations)/.test(path))).toEqual([])
 })
 
 test('a question, its citation and its evidence work at this viewport', async ({ page }) => {

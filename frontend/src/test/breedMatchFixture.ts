@@ -1,0 +1,95 @@
+export const analysisFixture = {
+  schema_version: '1.0',
+  analysis_id: 'an-1',
+  status: 'completed',
+  snapshot_id: 'snap-1',
+  criteria: [
+    { key: 'hunting_function', value: 'rastro', weight: 2 },
+    { key: 'coat', value: 'pelo duro', weight: 1 },
+  ],
+  candidates: [
+    {
+      breed: 'Teckel alemán',
+      score: 1,
+      documented_weight: 2,
+      possible_weight: 3,
+      coverage: 2 / 3,
+      findings: [
+        {
+          criterion_key: 'hunting_function',
+          criterion_value: 'rastro',
+          outcome: 'match',
+          explanation: 'La fuente documenta el criterio «rastro» para esta raza.',
+          citations: [
+            {
+              id: null,
+              fragment_id: 'frag-1',
+              document_id: 'doc-1',
+              version_id: 'ver-1',
+              title: 'Enciclopedia de perros de caza',
+              physical_page: 42,
+              printed_page_label: '40',
+            },
+          ],
+        },
+        {
+          criterion_key: 'coat',
+          criterion_value: 'pelo duro',
+          outcome: 'not_documented',
+          explanation: 'No documentado en la evidencia recuperada.',
+          citations: [],
+        },
+      ],
+    },
+    {
+      breed: 'Basset hound',
+      score: null,
+      documented_weight: 0,
+      possible_weight: 3,
+      coverage: 0,
+      findings: [
+        {
+          criterion_key: 'hunting_function',
+          criterion_value: 'rastro',
+          outcome: 'not_documented',
+          explanation: 'No documentado en la evidencia recuperada.',
+          citations: [],
+        },
+        {
+          criterion_key: 'coat',
+          criterion_value: 'pelo duro',
+          outcome: 'not_documented',
+          explanation: 'No documentado en la evidencia recuperada.',
+          citations: [],
+        },
+      ],
+    },
+  ],
+  limitations: ['No todos los criterios están documentados.'],
+  trace_id: 'trace-9',
+  reason: null,
+  execution: {
+    route: 'simple',
+    resolved_model: 'llama3.2:3b',
+    cache_hit: 'miss',
+    agent_iterations: 1,
+    latency_ms: 812.4,
+    route_reason: 'bounded_request',
+    cache_similarity: null,
+    fallback_used: false,
+    input_guardrail: 'allow',
+    output_guardrail: 'allow',
+  },
+  summary: 'Según la fuente, el teckel se utiliza para el rastro.',
+}
+
+export const configurationFixture = {
+  text_models: { simple: 'llama3.2:3b', complex: 'qwen3.5:2b', fallback: 'llama3.2:3b' },
+  embedding_model: 'nomic-embed-text:latest',
+  router_policy: 'router-v1',
+  guardrail_policy: 'guardrails-v1',
+  breed_match_policy: 'breed-match-v1',
+  semantic_cache_threshold: 0.92,
+  agent_max_iterations: 2,
+  breed_match_minimum_coverage: 0.5,
+}

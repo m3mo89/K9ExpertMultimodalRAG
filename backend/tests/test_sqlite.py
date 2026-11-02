@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from k9_expert.domain.breed_vocabulary import classify_section
 from k9_expert.infrastructure.filesystem import (
     ManagedFileStore,
     StagedFile,
@@ -123,3 +124,25 @@ def test_content_preserves_page_provenance_and_fragment_coverage(tmp_path: Path)
         ).fetchone()
     assert page["printed_page_label"] == "15"
     assert tuple(fragment) == (27, 28, "Teckel")
+
+
+def test_content_persists_versioned_optional_classification(tmp_path: Path) -> None:
+    database = SqliteDatabase(tmp_path / "k9.sqlite")
+    database.migrate()
+    documents = DocumentRepository(database)
+    document_id, version_id, fragment_id = uuid4(), uuid4(), uuid4()
+    documents.create_document(document_id, "Enciclopedia", None, None)
+    documents.create_version(version_id, document_id, "hash", "book.pdf", "files/book.pdf")
+    ContentRepository(database).add_fragment(
+        fragment_id, version_id, "fragment", 1, "Texto", 27, 27, "direct", "v3",
+        "Perros de rastro/Teckel alemán/Manto",
+        classify_section(("Perros de rastro", "Teckel alemán", "Manto")),
+    )
+    with database.connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM fragment_classification WHERE fragment_id = ?", (str(fragment_id),)
+        ).fetchone()
+    assert row["breed"] == "Teckel alemán"
+    assert row["breed_group"] == "perros de rastro"
+    assert row["hunting_functions_json"] == '["rastro"]'
+    assert row["section"] == "morfologia:manto"

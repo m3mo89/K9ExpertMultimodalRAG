@@ -132,8 +132,17 @@ class IngestionWorker:
                         "ocr" if used_ocr else "direct",
                         chunk.chunking_version,
                         "/".join(chunk.section_path),
+                        chunk.classification,
                     )
-            trace.set(fragment_count=len(chunks))
+            trace.set(
+                fragment_count=len(chunks),
+                classified_fragments=sum(
+                    1 for chunk in chunks if chunk.classification.provenance
+                ),
+                classification_policy=(
+                    chunks[0].classification.policy_version if chunks else None
+                ),
+            )
             if self.publish is None or self.prepare_index is None:
                 self.jobs.update_stage(job_id, JobStage.AVAILABLE, "fragments_persisted")
                 trace.finish(self.sink, "completed")

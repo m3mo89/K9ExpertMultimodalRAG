@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import groupby
 
+from k9_expert.domain.breed_vocabulary import BreedClassification, classify_section
 from k9_expert.infrastructure.extraction import ExtractedPage, TextBlock
 
 
@@ -17,7 +18,7 @@ class StructuredBlock:
     section_path: tuple[str, ...]
 
 
-CHUNKING_VERSION = "page-section-v2"
+CHUNKING_VERSION = "page-section-v3-classified"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +29,7 @@ class Chunk:
     section_path: tuple[str, ...]
     covered_pages: tuple[int, ...]
     token_estimate: int
+    classification: BreedClassification
     chunking_version: str = CHUNKING_VERSION
 
 
@@ -125,6 +127,7 @@ class PageAwareChunker:
                         section_path=section,
                         covered_pages=(page,),
                         token_estimate=len(text.split()),
+                        classification=classify_section(section),
                     )
                 )
                 if end == len(words):

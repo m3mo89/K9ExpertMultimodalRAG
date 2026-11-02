@@ -14,7 +14,11 @@ from uuid import uuid4
 from k9_expert.domain.errors import DomainError
 from k9_expert.domain.models import TraceEvent
 from k9_expert.domain.telemetry import redact
-from k9_expert.infrastructure.sqlite import InteractionRepository, TraceRepository
+from k9_expert.infrastructure.sqlite import (
+    BreedAnalysisRepository,
+    InteractionRepository,
+    TraceRepository,
+)
 from k9_expert.ports.interfaces import TraceSink
 
 
@@ -84,9 +88,11 @@ class TelemetryService:
         interactions: InteractionRepository,
         trace_retention_days: int = 30,
         comment_retention_days: int = 90,
+        analyses: BreedAnalysisRepository | None = None,
     ) -> None:
         self.traces = traces
         self.interactions = interactions
+        self.analyses = analyses
         self.trace_retention = timedelta(days=trace_retention_days)
         self.comment_retention = timedelta(days=comment_retention_days)
 
@@ -107,12 +113,16 @@ class TelemetryService:
 
     def apply_retention(self, as_of: datetime | None = None) -> dict[str, int]:
         current = as_of or datetime.now(UTC)
-        return {
+        comment_cutoff = (current - self.comment_retention).isoformat()
+        result = {
             "traces_purged": self.traces.purge((current - self.trace_retention).isoformat()),
-            "comments_expired": self.interactions.expire_feedback_comments(
-                (current - self.comment_retention).isoformat()
-            ),
+            "comments_expired": self.interactions.expire_feedback_comments(comment_cutoff),
         }
+        if self.analyses is not None:
+            result["analysis_comments_expired"] = self.analyses.expire_feedback_comments(
+                comment_cutoff
+            )
+        return result
 
     def aggregates(self, window: timedelta = timedelta(days=1)) -> dict[str, object]:
         since = (datetime.now(UTC) - window).isoformat()
@@ -155,6 +165,61 @@ class TelemetryService:
                 ),
             },
             "errors": dict(errors),
+            "layers": self._layers(queries, since),
+        }
+
+    def _layers(self, queries: list[dict[str, Any]], since: str) -> dict[str, object]:
+        """Mandatory-layer aggregates over chat and BreedMatch traces; counts only, no text."""
+        analyses = [
+            cast(dict[str, Any], item["attributes"])
+            for item in self.traces.list(kind="breed_analysis", since=since, limit=10_000)
+        ]
+        traces = queries + analyses
+        durations: dict[str, list[float]] = {}
+        for item in traces:
+            for stage in item.get("stages", []):
+                # Agent iterations add numbered stages (retrieval_2); they share one layer.
+                name = str(stage["name"]).rstrip("_0123456789")
+                durations.setdefault(name, []).append(float(stage["duration_ms"]))
+        guardrails: Counter[str] = Counter()
+        for item in traces:
+            for layer in ("input_guardrail", "output_guardrail"):
+                decision = item.get(layer)
+                if isinstance(decision, dict):
+                    guardrails[f"{layer}:{decision.get('action')}:{decision.get('reason')}"] += 1
+        return {
+            "latency_ms": {
+                name: {
+                    "count": len(values),
+                    "p50": _percentile(sorted(values), 0.50),
+                    "p95": _percentile(sorted(values), 0.95),
+                }
+                for name, values in sorted(durations.items())
+            },
+            "guardrails": dict(guardrails),
+            "cache": {
+                operation: dict(Counter(str(item.get("cache_type", "none")) for item in group))
+                for operation, group in (("query", queries), ("breed_analysis", analyses))
+            },
+            # Chat traces keep `route` for the lexical domain signal; models use `model_route`.
+            "routes": dict(
+                Counter(str(item["model_route"]) for item in queries if item.get("model_route"))
+                + Counter(str(item["route"]) for item in analyses if item.get("route"))
+            ),
+            "route_reasons": dict(Counter(
+                str(item["route_reason"]) for item in traces if item.get("route_reason")
+            )),
+            "resolved_models": dict(Counter(
+                str(item["resolved_model"]) for item in traces if item.get("resolved_model")
+            )),
+            "fallback_used": sum(1 for item in traces if item.get("fallback_used")),
+            "agent_iterations": dict(Counter(
+                str(item["agent_iterations"]) for item in traces if "agent_iterations" in item
+            )),
+            "breed_match_states": dict(Counter(str(item.get("status")) for item in analyses)),
+            "breed_match_feedback": (
+                self.analyses.feedback_utility(since) if self.analyses is not None else []
+            ),
         }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -27,12 +28,31 @@ from k9_expert.application.documents import (
 )
 from k9_expert.application.query_service import SubmitQuery
 from k9_expert.application.recovery import BackupError
-from k9_expert.domain.models import DocumentId, QueryFilters
+from k9_expert.domain.models import (
+    BreedAnalysisProfile,
+    BreedAnalysisReport,
+    BreedCriterion,
+    DocumentId,
+    QueryFilters,
+)
 
 
 class HealthResponse(BaseModel):
     status: str
     worker_concurrency: int
+
+
+class ModelConfigurationResponse(BaseModel):
+    """Logical aliases and versions only: no runtime addresses, paths or secrets."""
+
+    text_models: dict[str, str]
+    embedding_model: str
+    router_policy: str
+    guardrail_policy: str
+    breed_match_policy: str
+    semantic_cache_threshold: float
+    agent_max_iterations: int
+    breed_match_minimum_coverage: float
 
 
 class UploadResponse(BaseModel):
@@ -175,6 +195,11 @@ class AnalysisExecutionResponse(BaseModel):
     cache_hit: str = "miss"
     agent_iterations: int = 0
     latency_ms: float | None = None
+    route_reason: str | None = None
+    cache_similarity: float | None = None
+    fallback_used: bool = False
+    input_guardrail: str | None = None
+    output_guardrail: str | None = None
 
 
 class BreedAnalysisResponse(BaseModel):
@@ -188,6 +213,7 @@ class BreedAnalysisResponse(BaseModel):
     trace_id: str | None = None
     reason: str | None = None
     execution: AnalysisExecutionResponse = Field(default_factory=AnalysisExecutionResponse)
+    summary: str | None = None
 
 
 class AnalysisFeedbackRequest(BaseModel):
@@ -271,6 +297,45 @@ def admin_guard(container: ApplicationContainer) -> Callable[..., str]:
     return require_admin
 
 
+def breed_analysis_response(report: BreedAnalysisReport) -> BreedAnalysisResponse:
+    return BreedAnalysisResponse(
+        analysis_id=str(report.analysis_id), status=str(report.status),
+        snapshot_id=str(report.snapshot_id) if report.snapshot_id else None,
+        criteria=[BreedCriterionRequest(key=item.key, value=item.value, weight=item.weight)
+                  for item in report.profile.criteria],
+        candidates=[BreedCandidateResponse(
+            breed=candidate.breed, score=candidate.score,
+            documented_weight=candidate.documented_weight,
+            possible_weight=candidate.possible_weight, coverage=candidate.coverage,
+            findings=[BreedFindingResponse(
+                criterion_key=finding.criterion.key,
+                criterion_value=finding.criterion.value, outcome=str(finding.outcome),
+                explanation=finding.explanation,
+                citations=[AnalysisCitationResponse(
+                    fragment_id=str(citation.evidence_id),
+                    document_id=str(citation.source.document_id),
+                    version_id=str(citation.source.version_id), title=citation.source.title,
+                    physical_page=citation.source.physical_page,
+                    printed_page_label=citation.source.printed_page_label,
+                ) for citation in finding.citations],
+            ) for finding in candidate.findings],
+        ) for candidate in report.candidates],
+        limitations=list(report.limitations), trace_id=report.trace_id, reason=report.reason,
+        execution=AnalysisExecutionResponse(
+            route=report.execution.route, resolved_model=report.execution.resolved_model,
+            cache_hit=str(report.execution.cache_hit),
+            agent_iterations=report.execution.agent_iterations,
+            latency_ms=report.execution.latency_ms,
+            route_reason=report.execution.route_reason,
+            cache_similarity=report.execution.cache_similarity,
+            fallback_used=report.execution.fallback_used,
+            input_guardrail=report.execution.input_guardrail,
+            output_guardrail=report.execution.output_guardrail,
+        ),
+        summary=report.summary,
+    )
+
+
 def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     resolved = container or compose()
     app = FastAPI(title="K9 Expert", version="0.1.0")
@@ -293,6 +358,24 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     @app.get("/api/v1/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok", worker_concurrency=resolved.settings.worker_concurrency)
+
+    @app.get("/api/v1/configuration", response_model=ModelConfigurationResponse)
+    def configuration() -> ModelConfigurationResponse:
+        settings = resolved.settings
+        return ModelConfigurationResponse(
+            text_models={
+                "simple": settings.text_simple_model,
+                "complex": settings.text_complex_model,
+                "fallback": settings.text_fallback_model,
+            },
+            embedding_model=settings.embedding_model,
+            router_policy=settings.router_policy_version,
+            guardrail_policy=settings.guardrail_policy_version,
+            breed_match_policy=settings.breed_match_policy_version,
+            semantic_cache_threshold=settings.semantic_cache_threshold,
+            agent_max_iterations=settings.agent_max_iterations,
+            breed_match_minimum_coverage=settings.breed_match_minimum_coverage,
+        )
 
     @app.post(
         "/api/v1/admin/confirmations",
@@ -523,30 +606,59 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             result.citations
         )
         return QueryResponse(
-            query_id=str(result.query_id),
-            answer_id=stored.answer_id,
-            status=str(result.status),
-            answer=result.answer,
+            query_id=str(result.query_id), answer_id=stored.answer_id,
+            status=str(result.status), answer=result.answer,
             snapshot_id=str(result.snapshot_id) if result.snapshot_id else None,
-            reason=result.reason,
-            trace_id=result.trace_id,
+            reason=result.reason, trace_id=result.trace_id,
             discrepancy=result.discrepancy,
             conversation_id=str(request.conversation_id) if request.conversation_id else None,
-            citations=[
-                {
-                    "id": citation_id,
-                    "fragment_id": str(citation.evidence_id),
-                    "document_id": str(citation.source.document_id),
-                    "version_id": str(citation.source.version_id),
-                    "title": citation.source.title,
-                    "author": citation.source.author,
-                    "edition": citation.source.edition,
-                    "physical_page": citation.source.physical_page,
-                    "printed_page_label": citation.source.printed_page_label,
-                    "source_status": "active",
-                }
-                for citation_id, citation in zip(citation_ids, result.citations, strict=True)
-            ],
+            citations=[{
+                "id": citation_id, "fragment_id": str(citation.evidence_id),
+                "document_id": str(citation.source.document_id),
+                "version_id": str(citation.source.version_id), "title": citation.source.title,
+                "author": citation.source.author, "edition": citation.source.edition,
+                "physical_page": citation.source.physical_page,
+                "printed_page_label": citation.source.printed_page_label,
+                "source_status": "active",
+            } for citation_id, citation in zip(citation_ids, result.citations, strict=True)],
+        )
+
+    @app.post(
+        "/api/v1/breed-analyses", response_model=BreedAnalysisResponse, status_code=201
+    )
+    def analyze_breeds(request: BreedAnalysisRequest) -> BreedAnalysisResponse:
+        profile = BreedAnalysisProfile(
+            tuple(BreedCriterion(item.key, item.value, item.weight) for item in request.criteria),
+            tuple(request.candidate_breeds),
+            tuple(DocumentId(item) for item in request.document_ids),
+        )
+        return breed_analysis_response(resolved.breed_analysis_service.analyze(profile))
+
+    @app.get("/api/v1/breed-analyses/{analysis_id}", response_model=BreedAnalysisResponse)
+    def get_breed_analysis(analysis_id: str) -> BreedAnalysisResponse:
+        try:
+            return breed_analysis_response(resolved.breed_analysis_service.get(analysis_id))
+        except (KeyError, ValueError) as error:
+            raise HTTPException(status_code=404, detail="analysis_not_found") from error
+
+    @app.post(
+        "/api/v1/breed-analyses/{analysis_id}/feedback",
+        response_model=AnalysisFeedbackResponse, status_code=201,
+    )
+    def submit_analysis_feedback(
+        analysis_id: str, request: AnalysisFeedbackRequest
+    ) -> AnalysisFeedbackResponse:
+        try:
+            report = resolved.breed_analysis_service.get(analysis_id)
+            feedback_id = resolved.breed_analysis_service.feedback(
+                analysis_id, request.useful, request.comment
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(status_code=404, detail="analysis_not_found") from error
+        return AnalysisFeedbackResponse(
+            id=feedback_id, analysis_id=analysis_id, trace_id=report.trace_id or "",
+            useful=int(request.useful), comment=request.comment,
+            created_at=datetime.now(UTC).isoformat(),
         )
 
     @app.get("/api/v1/documents", response_model=list[DocumentResponse])

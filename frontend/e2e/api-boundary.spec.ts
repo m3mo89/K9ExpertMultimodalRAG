@@ -15,6 +15,12 @@ test('the browser only talks to the same-origin application API', async ({ page,
   await mockApi(page)
 
   // Exercise every view and the main user and administrator flows.
+  await page.goto('/')
+  await page.getByLabel('Valor del criterio 1').fill('rastro')
+  await page.getByRole('button', { name: 'Analizar razas' }).click()
+  await expect(page.getByRole('table', { name: 'Comparación por criterio' })).toBeVisible()
+  await page.getByText('Configuración de modelos').click()
+  await expect(page.getByText('Alias complex')).toBeVisible()
   await page.goto('/#/consultar')
   await page.getByLabel('Pregunta').fill('¿Cómo es el teckel?')
   await page.getByRole('button', { name: 'Preguntar' }).click()

@@ -159,6 +159,12 @@ class ExecutionMetadata:
     cache_hit: CacheHitType = CacheHitType.MISS
     agent_iterations: int = 0
     latency_ms: float | None = None
+    route_reason: str | None = None
+    cache_similarity: float | None = None
+    fallback_used: bool = False
+    # "action" or "action:reason" for each guardrail stage that ran.
+    input_guardrail: str | None = None
+    output_guardrail: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +178,8 @@ class BreedAnalysisReport:
     trace_id: str | None = None
     reason: str | None = None
     execution: ExecutionMetadata = field(default_factory=ExecutionMetadata)
+    # Model narrative over verified findings; it never alters candidates or scores.
+    summary: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

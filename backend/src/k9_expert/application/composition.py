@@ -8,9 +8,19 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
+
 from k9_expert.application.admin import AdminSecurityService
+from k9_expert.application.agent import DomainPreservingReformulator
+from k9_expert.application.breed_analysis import BreedAnalysisService
+from k9_expert.application.breed_match import DeterministicBreedMatcher
 from k9_expert.application.documents import DocumentRegistrationService, PdfValidator
-from k9_expert.application.generation import OllamaTextGateway
+from k9_expert.application.generation import (
+    PROMPT_VERSION,
+    OllamaTextGateway,
+    RoutedOllamaGateway,
+)
+from k9_expert.application.guardrails import InputGuardrailChain
 from k9_expert.application.indexing import SnapshotIndexBuilder, SnapshotRetriever
 from k9_expert.application.ingestion import IngestionWorker
 from k9_expert.application.interactions import InteractionService
@@ -30,6 +40,8 @@ from k9_expert.application.query import (
 )
 from k9_expert.application.query_service import QueryService
 from k9_expert.application.recovery import BackupService, IndexMaintainer, RestoreService
+from k9_expert.application.response_cache import AnalysisResponseCache, QueryResponseCache
+from k9_expert.application.routing import ComplexityRouter
 from k9_expert.infrastructure.embeddings import (
     CachingEmbedder,
     DocumentEmbedder,
@@ -39,6 +51,7 @@ from k9_expert.infrastructure.embeddings import (
 from k9_expert.infrastructure.extraction import TesseractOcrAdapter
 from k9_expert.infrastructure.filesystem import ManagedFileStore
 from k9_expert.infrastructure.sqlite import (
+    BreedAnalysisRepository,
     CacheInvalidator,
     ContentRepository,
     DocumentRepository,
@@ -47,6 +60,7 @@ from k9_expert.infrastructure.sqlite import (
     SecurityRepository,
     SnapshotRepository,
     SqliteDatabase,
+    SqliteResponseCache,
     SystemStateRepository,
     TraceRepository,
 )
@@ -66,6 +80,8 @@ class ApplicationSettings:
     text_model: str = "llama3.2:3b"
     embedding_model: str = "nomic-embed-text:latest"
     embedding_dimensions: int = 768
+    embedding_query_prefix: str = "search_query: "
+    embedding_document_prefix: str = "search_document: "
     retrieval_candidates: int = 24
     retrieval_top_k: int = 6
     retrieval_minimum_score: float = 0.0
@@ -82,7 +98,7 @@ class ApplicationSettings:
     guardrail_policy_version: str = "guardrails-v1"
     exact_cache_ttl_seconds: int = 3600
     semantic_cache_ttl_seconds: int = 1800
-    semantic_cache_threshold: float = 0.92
+    semantic_cache_threshold: float = 0.85
     agent_max_iterations: int = 2
     router_policy_version: str = "router-v1"
     text_simple_model: str = "llama3.2:3b"
@@ -123,6 +139,7 @@ class ApplicationContainer:
     restore_service: RestoreService
     ingestion_worker: IngestionWorker
     system_state: SystemStateRepository
+    breed_analysis_service: BreedAnalysisService
 
 
 # TOML key -> settings field. The admin secret is deliberately not read from files.
@@ -134,6 +151,8 @@ _TOML_FIELDS = {
     ("models", "text_default_model"): "text_model",
     ("models", "embedding_default_model"): "embedding_model",
     ("models", "embedding_dimensions"): "embedding_dimensions",
+    ("models", "embedding_query_prefix"): "embedding_query_prefix",
+    ("models", "embedding_document_prefix"): "embedding_document_prefix",
     ("models", "generation_context_window"): "generation_context_window",
     ("retrieval", "candidates"): "retrieval_candidates",
     ("retrieval", "top_k"): "retrieval_top_k",
@@ -204,7 +223,11 @@ def compose(
     interactions = InteractionRepository(database)
     admin_security = AdminSecurityService(SecurityRepository(database), resolved.admin_secret)
     # Embeddings: Ollama with task prefixes in production, a plain test double otherwise.
-    ollama_embedder = OllamaEmbedder(model=resolved.embedding_model)
+    ollama_embedder = OllamaEmbedder(
+        model=resolved.embedding_model,
+        query_prefix=resolved.embedding_query_prefix,
+        document_prefix=resolved.embedding_document_prefix,
+    )
     document_embedder: DocumentEmbedder = (
         ollama_embedder if embedder is None else _UnprefixedEmbedder(embedder)
     )
@@ -222,7 +245,8 @@ def compose(
     index_builder = SnapshotIndexBuilder(
         resolved.index_dir, cached_embedder.embed_documents, resolved.embedding_dimensions
     )
-    cache_invalidator = CacheInvalidator()
+    response_cache_backend = SqliteResponseCache(database)
+    cache_invalidator = CacheInvalidator(response_cache_backend)
     # Rebuilt vectors must use the same document prefix as ingestion.
     embed = embedder.embed if embedder else ollama_embedder.embed_documents
     index = IndexMaintainer(snapshots, resolved.index_dir, embed)
@@ -247,16 +271,40 @@ def compose(
         context_tokens=resolved.retrieval_context_tokens,
         max_per_section=resolved.retrieval_max_per_section,
     )
-    retriever = SnapshotRetriever(
-        resolved.index_dir,
-        snapshots,
-        lambda text: (
+    def embed_query(text: str) -> Sequence[float]:
+        return (
             ollama_embedder.embed_queries([text])[0]
             if embedder is None
             else embedder.embed([text])[0]
-        ),
+        )
+
+    retriever = SnapshotRetriever(
+        resolved.index_dir,
+        snapshots,
+        embed_query,
         selector,
         candidates=resolved.retrieval_candidates,
+    )
+    # Upper layers only see the logical aliases; concrete local models stay in the gateway.
+    routed_gateway = RoutedOllamaGateway(
+        {
+            alias: OllamaTextGateway(
+                model,
+                client=httpx.Client(
+                    base_url="http://127.0.0.1:11434", timeout=resolved.model_timeout_seconds
+                ),
+                context_window=resolved.generation_context_window,
+                # Structured answers: reasoning models (qwen) must not emit a thinking trace.
+                think=False,
+            )
+            for alias, model in (
+                ("simple", resolved.text_simple_model),
+                ("complex", resolved.text_complex_model),
+                ("fallback", resolved.text_fallback_model),
+            )
+        },
+        "fallback",
+        max_retries=resolved.model_max_retries,
     )
     query_service = QueryService(
         QueryOrchestrator(
@@ -266,6 +314,23 @@ def compose(
             text_alias=gateway.alias,
             resolved_model=lambda: gateway.resolved_model,
             sufficiency=EvidenceSufficiencyPolicy(resolved.sufficiency_minimum_score),
+            response_cache=QueryResponseCache(
+                response_cache_backend,
+                embed_query,
+                identity=(
+                    f"query:{PROMPT_VERSION}:{resolved.guardrail_policy_version}:"
+                    f"{resolved.router_policy_version}:{resolved.text_simple_model}:"
+                    f"{resolved.text_complex_model}"
+                ),
+                exact_ttl_seconds=resolved.exact_cache_ttl_seconds,
+                semantic_ttl_seconds=resolved.semantic_cache_ttl_seconds,
+                semantic_threshold=resolved.semantic_cache_threshold,
+            ),
+            input_guardrails=InputGuardrailChain(),
+            reformulate=DomainPreservingReformulator(),
+            agent_max_iterations=resolved.agent_max_iterations,
+            model_router=ComplexityRouter(resolved.router_policy_version),
+            routed_gateway=routed_gateway,
             retrieval_config={
                 "embedding_alias": ollama_embedder.alias,
                 "embedding_model": resolved.embedding_model,
@@ -280,13 +345,46 @@ def compose(
         interactions,
         state,
     )
+    analysis_repository = BreedAnalysisRepository(database)
     telemetry = TelemetryService(
         traces,
         interactions,
         trace_retention_days=resolved.trace_retention_days,
         comment_retention_days=resolved.feedback_comment_retention_days,
+        analyses=analysis_repository,
     )
-    probe = model_probe or OllamaModelProbe((resolved.text_model, resolved.embedding_model))
+    probe = model_probe or OllamaModelProbe(tuple(dict.fromkeys((
+        resolved.text_simple_model,
+        resolved.text_complex_model,
+        resolved.text_fallback_model,
+        resolved.embedding_model,
+    ))))
+    breed_analysis_service = BreedAnalysisService(
+        documents,
+        retriever,
+        snapshots.classified_breeds,
+        analysis_repository,
+        DeterministicBreedMatcher(resolved.breed_match_minimum_coverage),
+        sink=traces,
+        max_candidates=resolved.breed_match_max_candidates,
+        cache=AnalysisResponseCache(
+            response_cache_backend,
+            embed_query,
+            identity=(
+                f"breed:{resolved.breed_match_policy_version}:"
+                f"{resolved.guardrail_policy_version}:{resolved.router_policy_version}:"
+                f"{resolved.text_simple_model}:{resolved.text_complex_model}"
+            ),
+            exact_ttl_seconds=resolved.exact_cache_ttl_seconds,
+            semantic_ttl_seconds=resolved.semantic_cache_ttl_seconds,
+            semantic_threshold=resolved.semantic_cache_threshold,
+        ),
+        router=ComplexityRouter(resolved.router_policy_version),
+        gateway=routed_gateway,
+        sufficiency=EvidenceSufficiencyPolicy(resolved.sufficiency_minimum_score),
+        reformulate=DomainPreservingReformulator(),
+        agent_max_iterations=resolved.agent_max_iterations,
+    )
     return ApplicationContainer(
         settings=resolved,
         document_service=service,
@@ -346,6 +444,7 @@ def compose(
             },
         ),
         system_state=state,
+        breed_analysis_service=breed_analysis_service,
     )
 
 

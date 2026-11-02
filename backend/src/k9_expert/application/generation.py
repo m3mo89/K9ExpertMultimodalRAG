@@ -60,12 +60,14 @@ class OllamaTextGateway:
         client: httpx.Client | None = None,
         max_output_retries: int = 1,
         context_window: int = 8192,
+        think: bool | None = None,
     ) -> None:
         self.context_window = context_window
         self.model = model
         self.client = client or httpx.Client(base_url="http://127.0.0.1:11434", timeout=120)
         self.max_output_retries = max_output_retries
         self.resolved_model: str | None = None
+        self.think = think
 
     def generate(self, system_prompt: str, user_prompt: str) -> GeneratedAnswer:
         """Structured answer; malformed output is retried a bounded number of times."""
@@ -80,19 +82,21 @@ class OllamaTextGateway:
 
     def _chat(self, system_prompt: str, user_prompt: str) -> str:
         try:
+            body: dict[str, object] = {
+                "model": self.model,
+                "stream": False,
+                "format": "json",
+                "options": {"num_ctx": self.context_window},
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
+            if self.think is not None:
+                body["think"] = self.think
             response = self.client.post(
                 "/api/chat",
-                json={
-                    "model": self.model,
-                    "stream": False,
-                    "format": "json",
-                    # The default context window would silently truncate the evidence.
-                    "options": {"num_ctx": self.context_window},
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                },
+                json=body,
             )
             response.raise_for_status()
             payload = response.json()
@@ -100,6 +104,52 @@ class OllamaTextGateway:
             return str(payload["message"]["content"])
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as error:
             raise ModelUnavailableError(f"Generación local no disponible: {error}") from error
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayAttempt:
+    alias: str
+    model: str
+    outcome: str
+
+
+class RoutedOllamaGateway:
+    """Logical aliases, bounded transient retry and a local-only fallback."""
+
+    def __init__(
+        self,
+        gateways: dict[str, OllamaTextGateway],
+        fallback_alias: str,
+        max_retries: int = 1,
+    ) -> None:
+        if fallback_alias not in gateways:
+            raise ValueError("fallback_alias_unknown")
+        self.gateways = gateways
+        self.fallback_alias = fallback_alias
+        self.max_retries = max_retries
+        self.attempts: list[GatewayAttempt] = []
+
+    def generate(self, alias: str, system_prompt: str, user_prompt: str) -> GeneratedAnswer:
+        if alias not in self.gateways:
+            raise ModelUnavailableError("Alias local no configurado.")
+        aliases = [alias] + ([self.fallback_alias] if alias != self.fallback_alias else [])
+        last_error: ModelUnavailableError | None = None
+        for selected in aliases:
+            gateway = self.gateways[selected]
+            for _ in range(self.max_retries + 1):
+                try:
+                    result = gateway.generate(system_prompt, user_prompt)
+                    self.attempts.append(GatewayAttempt(selected, gateway.model, "success"))
+                    return result
+                except ModelUnavailableError as error:
+                    last_error = error
+                    self.attempts.append(GatewayAttempt(selected, gateway.model, "unavailable"))
+        assert last_error is not None
+        raise last_error
+
+    def resolved_model(self, alias: str) -> str | None:
+        gateway = self.gateways.get(alias)
+        return gateway.resolved_model if gateway else None
 
 
 def _parse(content: str) -> GeneratedAnswer:

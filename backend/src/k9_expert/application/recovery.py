@@ -82,7 +82,10 @@ class IndexMaintainer:
                         version_id=str(row["version_id"]),
                         physical_page=int(row["page_start"]),
                         category=row["category"],
-                        section=row["section_path"] or None,
+                        breed=row["breed"],
+                        breed_group=row["breed_group"],
+                        hunting_functions=row["hunting_functions_json"],
+                        section=row["section"] or row["section_path"] or None,
                     )
                     for row, vector in zip(batch, vectors, strict=True)
                 ]

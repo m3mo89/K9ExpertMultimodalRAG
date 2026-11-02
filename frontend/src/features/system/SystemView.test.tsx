@@ -32,6 +32,18 @@ describe('SystemView', () => {
           generation_calls: 2,
           ingestion: { jobs_completed: 1, jobs_failed: 0, pages: 243, ocr_pages: 4, fragments: 900, pages_per_minute: 61.5 },
           errors: {},
+          layers: {
+            latency_ms: { retrieval: { count: 2, p50: 40, p95: 90 } },
+            guardrails: { 'input_guardrail:block:prompt_injection_detected': 1 },
+            cache: { query: { miss: 2 }, breed_analysis: { miss: 1, semantic: 1 } },
+            routes: { simple: 1 },
+            route_reasons: { bounded_request: 1 },
+            resolved_models: { 'llama3.2:3b': 1 },
+            fallback_used: 0,
+            agent_iterations: { '1': 1 },
+            breed_match_states: { completed: 2 },
+            breed_match_feedback: [],
+          },
         },
       },
     })
@@ -49,5 +61,8 @@ describe('SystemView', () => {
     expect(screen.getByText('812 ms / 2400 ms')).toBeInTheDocument()
     expect(screen.getByText('50 %')).toBeInTheDocument()
     expect(screen.getByText('61.5')).toBeInTheDocument()
+    expect(screen.getByText('Capas de ejecución de IA')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Caché de análisis' })).toHaveTextContent('Caché semántica')
+    expect(screen.getByRole('table', { name: 'Análisis de razas por resultado' })).toHaveTextContent('Análisis completo')
   })
 })

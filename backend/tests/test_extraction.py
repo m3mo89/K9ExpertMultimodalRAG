@@ -103,6 +103,7 @@ def test_heading_detection_and_page_aware_chunks_preserve_provenance() -> None:
     chunks = PageAwareChunker(max_tokens=3, overlap_tokens=1).chunk(structured)
     assert chunks[0].covered_pages == (7,)
     assert chunks[0].section_path == ("Cuidados",)
+    assert chunks[0].classification.breed is None
     assert chunks[0].content_hash != chunks[1].content_hash
 
 
@@ -145,7 +146,10 @@ def test_typographic_headings_and_section_chunks_name_their_topic() -> None:
     ] * 3
     [chunk] = PageAwareChunker().chunk(structured)
     assert chunk.text.startswith("Perros de caza nórdicos › Norsk elghund › Cola\n")
-    assert chunk.chunking_version == "page-section-v2"
+    assert chunk.chunking_version == "page-section-v3-classified"
+    assert chunk.classification.breed == "Norsk elghund"
+    assert chunk.classification.breed_group is None
+    assert chunk.classification.section == "morfologia:cola"
 
 
 def test_encyclopedia_golden_structure_keeps_breed_context() -> None:

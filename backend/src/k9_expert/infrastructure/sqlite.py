@@ -5,7 +5,7 @@ import json
 import math
 import secrets
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +13,7 @@ from types import TracebackType
 from typing import Literal, NamedTuple, cast
 from uuid import UUID, uuid4
 
+from k9_expert.domain.breed_vocabulary import BreedClassification, validate_classification
 from k9_expert.domain.models import (
     AnalysisFeedback,
     AnalysisStatus,
@@ -38,7 +39,7 @@ from k9_expert.domain.models import (
 )
 from k9_expert.domain.telemetry import redact
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 CLEANUP_QUEUE_TABLE = """
 CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
@@ -94,6 +95,18 @@ CREATE INDEX IF NOT EXISTS semantic_cache_partition
   ON semantic_response_cache(partition_key, snapshot_id, expires_at);
 """
 
+BREED_ANALYSIS_SUMMARY_COLUMN = """
+ALTER TABLE breed_analyses ADD COLUMN summary TEXT;
+"""
+
+FRAGMENT_CLASSIFICATION_TABLE = """
+CREATE TABLE IF NOT EXISTS fragment_classification (
+  fragment_id TEXT PRIMARY KEY REFERENCES fragments(id) ON DELETE CASCADE,
+  breed TEXT, breed_group TEXT, hunting_functions_json TEXT NOT NULL DEFAULT '[]',
+  section TEXT, provenance_json TEXT NOT NULL DEFAULT '[]', policy_version TEXT NOT NULL
+);
+"""
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, author TEXT, category TEXT, status TEXT NOT NULL,
@@ -145,14 +158,18 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
   operation TEXT NOT NULL, resource_version TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
-""" + CLEANUP_QUEUE_TABLE + REINDEX_TABLES + BREED_MATCH_TABLES
+""" + CLEANUP_QUEUE_TABLE + REINDEX_TABLES + BREED_MATCH_TABLES + FRAGMENT_CLASSIFICATION_TABLE
+SCHEMA += BREED_ANALYSIS_SUMMARY_COLUMN
 
 
 INDEX_FRAGMENTS_SQL = """SELECT f.id, f.text, f.content_hash, f.version_id, f.page_start,
-f.section_path, v.document_id, v.file_path, d.category FROM snapshot_membership m
+f.section_path, v.document_id, v.file_path, d.category, c.breed, c.breed_group,
+c.hunting_functions_json, c.section, c.provenance_json, c.policy_version
+FROM snapshot_membership m
 JOIN fragments f ON f.id = m.fragment_id
 JOIN document_versions v ON v.id = f.version_id
 JOIN documents d ON d.id = v.document_id
+LEFT JOIN fragment_classification c ON c.fragment_id = f.id
 WHERE m.snapshot_id = ? ORDER BY f.version_id, f.ordinal"""
 
 # Builds and validates a candidate's vector generation: (snapshot_id, previous_id, rows).
@@ -227,6 +244,19 @@ class SqliteDatabase:
             if current == 3:
                 connection.executescript(BREED_MATCH_TABLES)
                 connection.execute("PRAGMA user_version = 4")
+                current = 4
+            if current == 4:
+                connection.executescript(FRAGMENT_CLASSIFICATION_TABLE)
+                connection.execute("PRAGMA user_version = 5")
+                current = 5
+            if current == 5:
+                columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(breed_analyses)")
+                }
+                if "summary" not in columns:
+                    connection.executescript(BREED_ANALYSIS_SUMMARY_COLUMN)
+                connection.execute("PRAGMA user_version = 6")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -682,6 +712,7 @@ class ContentRepository:
         extraction_method: str,
         chunking_version: str,
         section_path: str = "",
+        classification: BreedClassification | None = None,
     ) -> None:
         with self.database.transaction() as connection:
             connection.execute(
@@ -699,6 +730,21 @@ class ContentRepository:
                     chunking_version,
                 ),
             )
+            if classification is not None:
+                validate_classification(classification)
+                connection.execute(
+                    """INSERT OR REPLACE INTO fragment_classification
+                    (fragment_id, breed, breed_group, hunting_functions_json, section,
+                     provenance_json, policy_version) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(fragment_id), classification.breed,
+                        classification.breed_group,
+                        json.dumps(classification.hunting_functions),
+                        classification.section,
+                        json.dumps(classification.provenance),
+                        classification.policy_version,
+                    ),
+                )
 
 
     def fragment_ids_by_hash(self, version_id: str, content_hashes: list[str]) -> dict[str, str]:
@@ -824,6 +870,17 @@ class SnapshotRepository:
             )
             return [str(row["fragment_id"]) for row in rows]
 
+    def classified_breeds(self, snapshot_id: str, limit: int = 20) -> list[str]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT c.breed, COUNT(*) AS fragments FROM snapshot_membership m
+                JOIN fragment_classification c ON c.fragment_id = m.fragment_id
+                WHERE m.snapshot_id = ? AND c.breed IS NOT NULL
+                GROUP BY c.breed ORDER BY fragments DESC, c.breed LIMIT ?""",
+                (snapshot_id, limit),
+            )
+        return [str(row["breed"]) for row in rows]
+
     def snapshot(self, snapshot_id: str) -> sqlite3.Row | None:
         with self.database.connect() as connection:
             row = connection.execute("SELECT * FROM snapshots WHERE id = ?", (snapshot_id,)).fetchone()
@@ -843,11 +900,14 @@ class SnapshotRepository:
             return list(
                 connection.execute(
                     f"""SELECT f.id, f.text, f.page_start, f.section_path, f.version_id,
-                    v.document_id, v.edition, d.title, d.author, p.printed_page_label
+                    v.document_id, v.edition, d.title, d.author, p.printed_page_label,
+                    c.breed, c.breed_group, c.hunting_functions_json, c.section,
+                    c.provenance_json, c.policy_version
                     FROM snapshot_membership m JOIN fragments f ON f.id = m.fragment_id
                     JOIN document_versions v ON v.id = f.version_id
                     JOIN documents d ON d.id = v.document_id
                     LEFT JOIN pages p ON p.version_id = f.version_id AND p.physical_page = f.page_start
+                    LEFT JOIN fragment_classification c ON c.fragment_id = f.id
                     WHERE m.snapshot_id = ? AND f.id IN ({placeholders})""",
                     (snapshot_id, *fragment_ids),
                 )
@@ -1086,11 +1146,14 @@ def _publication_state(connection: sqlite3.Connection, document_id: str) -> tupl
 
 
 class CacheInvalidator:
-    def __init__(self) -> None:
+    def __init__(self, response_cache: SqliteResponseCache | None = None) -> None:
         self.invalidated_snapshots: list[str] = []
+        self.response_cache = response_cache
 
     def invalidate_snapshot(self, snapshot_id: str) -> None:
         self.invalidated_snapshots.append(snapshot_id)
+        if self.response_cache is not None:
+            self.response_cache.invalidate_snapshot(snapshot_id)
 
 
 class BreedAnalysisRepository:
@@ -1115,17 +1178,22 @@ class BreedAnalysisRepository:
             "cache_hit": str(report.execution.cache_hit),
             "agent_iterations": report.execution.agent_iterations,
             "latency_ms": report.execution.latency_ms,
+            "route_reason": report.execution.route_reason,
+            "cache_similarity": report.execution.cache_similarity,
+            "fallback_used": report.execution.fallback_used,
+            "input_guardrail": report.execution.input_guardrail,
+            "output_guardrail": report.execution.output_guardrail,
         }
         with self.database.transaction() as connection:
             connection.execute(
                 """INSERT INTO breed_analyses
                 (id, status, profile_json, snapshot_id, trace_id, reason, execution_json,
-                 limitations_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 limitations_json, created_at, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     str(report.analysis_id), str(report.status), json.dumps(profile),
                     str(report.snapshot_id) if report.snapshot_id else None,
                     report.trace_id or str(uuid4()), report.reason, json.dumps(execution),
-                    json.dumps(report.limitations), now(),
+                    json.dumps(report.limitations), now(), report.summary,
                 ),
             )
             for rank, candidate in enumerate(report.candidates, start=1):
@@ -1213,12 +1281,15 @@ class BreedAnalysisRepository:
             execution_data.get("route"), execution_data.get("resolved_model"),
             CacheHitType(execution_data.get("cache_hit", "miss")),
             int(execution_data.get("agent_iterations", 0)), execution_data.get("latency_ms"),
+            execution_data.get("route_reason"), execution_data.get("cache_similarity"),
+            bool(execution_data.get("fallback_used", False)),
+            execution_data.get("input_guardrail"), execution_data.get("output_guardrail"),
         )
         return BreedAnalysisReport(
             analysis_id, AnalysisStatus(str(row["status"])), profile,
             SnapshotId(UUID(str(row["snapshot_id"]))) if row["snapshot_id"] else None,
             tuple(candidates), tuple(json.loads(str(row["limitations_json"]))),
-            str(row["trace_id"]), row["reason"], execution,
+            str(row["trace_id"]), row["reason"], execution, row["summary"],
         )
 
     def add_feedback(self, feedback: AnalysisFeedback, trace_id: str) -> str:
@@ -1230,6 +1301,23 @@ class BreedAnalysisRepository:
                  feedback.comment, now()),
             )
         return feedback_id
+
+    def feedback_utility(self, since: str) -> list[dict[str, object]]:
+        """Useful/not-useful counts per route and model; comments are never read."""
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT json_extract(a.execution_json, '$.route') AS route,
+                       json_extract(a.execution_json, '$.resolved_model') AS model,
+                       SUM(f.useful) AS useful, COUNT(*) - SUM(f.useful) AS not_useful
+                FROM analysis_feedback f JOIN breed_analyses a ON a.id = f.analysis_id
+                WHERE f.created_at >= ? GROUP BY route, model ORDER BY route, model""",
+                (since,),
+            ).fetchall()
+        return [
+            {"route": row["route"], "model": row["model"],
+             "useful": int(row["useful"]), "not_useful": int(row["not_useful"])}
+            for row in rows
+        ]
 
     def expire_feedback_comments(self, before: str) -> int:
         with self.database.transaction() as connection:
@@ -1244,7 +1332,7 @@ class SqliteResponseCache:
         self.database = database
 
     def lookup(self, exact_key: str, *, partition: str, snapshot_id: str,
-               request_vector: list[float] | tuple[float, ...] | None = None,
+               request_vector: Sequence[float] | None = None,
                semantic_threshold: float | None = None) -> CacheLookup:
         timestamp = now()
         with self.database.connect() as connection:
@@ -1271,7 +1359,8 @@ class SqliteResponseCache:
         return CacheLookup(CacheHitType.MISS, similarity=best[0] if best else None)
 
     def store(self, exact_key: str, value: str, *, partition: str, snapshot_id: str,
-              expires_at: str, request_vector: list[float] | tuple[float, ...] | None = None) -> None:
+              expires_at: str, semantic_expires_at: str | None = None,
+              request_vector: Sequence[float] | None = None) -> None:
         timestamp = now()
         with self.database.transaction() as connection:
             connection.execute(
@@ -1283,7 +1372,7 @@ class SqliteResponseCache:
                 connection.execute(
                     """INSERT INTO semantic_response_cache VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (str(uuid4()), exact_key, partition, snapshot_id,
-                     json.dumps(request_vector), value, expires_at, timestamp),
+                     json.dumps(request_vector), value, semantic_expires_at or expires_at, timestamp),
                 )
 
     def invalidate_snapshot(self, snapshot_id: str) -> int:
@@ -1307,7 +1396,7 @@ class SqliteResponseCache:
         return exact + semantic
 
 
-def _cosine(left: list[float] | tuple[float, ...], right: list[float]) -> float:
+def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) != len(right) or not left:
         return -1.0
     denominator = math.sqrt(sum(value * value for value in left)) * math.sqrt(

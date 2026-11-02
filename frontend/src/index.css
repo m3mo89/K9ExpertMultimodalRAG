@@ -899,9 +899,89 @@ details > summary {
   font-variant-numeric: tabular-nums;
 }
 
+/* BreedMatch: criteria form and comparison report. */
+
+.criteria-list {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.criterion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) 6rem auto;
+  gap: 0 0.75rem;
+  align-items: end;
+}
+
+.criterion-row input[type='number'] {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.criteria-form .button-row {
+  margin-top: 0.75rem;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.comparison-table th[scope='row'] {
+  font-weight: 600;
+}
+
+.candidate-evidence {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.candidate-evidence summary,
+.execution-details summary,
+.model-configuration summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.finding-list,
+.citation-refs {
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+.finding {
+  margin-bottom: 0.5rem;
+}
+
+.finding p {
+  margin: 0.15rem 0;
+}
+
 /* Small screens: stack the chat sidebar and simplify the header. */
 
 @media (max-width: 760px) {
+  .criterion-row {
+    grid-template-columns: minmax(0, 1fr) 5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .criterion-row > label:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
   .topbar {
     position: static;
     flex-direction: column;

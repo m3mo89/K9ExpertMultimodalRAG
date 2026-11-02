@@ -28,6 +28,8 @@ BREED_ALIASES = {
     "setter ingles": "Setter inglés",
     "english springer spaniel": "English springer spaniel",
     "cocker spaniel": "Cocker spaniel",
+    "fox terrier": "Fox terrier",
+    "braco aleman": "Braco alemán",
 }
 
 SECTION_ALIASES = {
@@ -37,6 +39,8 @@ SECTION_ALIASES = {
     "manto": "morfologia:manto",
     "el trabajo y las cualidades": "trabajo:cualidades",
 }
+
+ALLOWED_FUNCTIONS = frozenset(value for values in GROUP_FUNCTIONS.values() for value in values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,3 +74,19 @@ def classify_section(path: tuple[str, ...]) -> BreedClassification:
         section=section,
         provenance=path if any((breed, group, section)) else (),
     )
+
+
+def validate_classification(classification: BreedClassification) -> None:
+    if classification.breed is not None and classification.breed not in BREED_ALIASES.values():
+        raise ValueError("classification_breed_invalid")
+    if classification.breed_group is not None and classification.breed_group not in GROUP_FUNCTIONS:
+        raise ValueError("classification_group_invalid")
+    if any(item not in ALLOWED_FUNCTIONS for item in classification.hunting_functions):
+        raise ValueError("classification_function_invalid")
+    if (
+        classification.section is not None
+        and classification.section not in SECTION_ALIASES.values()
+    ):
+        raise ValueError("classification_section_invalid")
+    if classification.policy_version != VOCABULARY_VERSION:
+        raise ValueError("classification_policy_invalid")

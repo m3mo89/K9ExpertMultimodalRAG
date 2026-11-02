@@ -34,9 +34,13 @@ class OllamaEmbedder:
         timeout_seconds: float = 120,
         batch_size: int = 16,
         client: httpx.Client | None = None,
+        query_prefix: str = "search_query: ",
+        document_prefix: str = "search_document: ",
     ) -> None:
         self.alias = alias
         self.model = model
+        # Task prefixes are model-specific; the defaults are nomic-embed-text's.
+        self.query_prefix, self.document_prefix = query_prefix, document_prefix
         self.batch_size = batch_size
         self._client = client or httpx.Client(base_url=base_url, timeout=timeout_seconds)
         self.telemetry: list[EmbeddingTelemetry] = []
@@ -45,10 +49,10 @@ class OllamaEmbedder:
         return self._embed(texts)
 
     def embed_queries(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
-        return self._embed([f"search_query: {text}" for text in texts])
+        return self._embed([f"{self.query_prefix}{text}" for text in texts])
 
     def embed_documents(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
-        return self._embed([f"search_document: {text}" for text in texts])
+        return self._embed([f"{self.document_prefix}{text}" for text in texts])
 
     def _embed(self, texts: Sequence[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
