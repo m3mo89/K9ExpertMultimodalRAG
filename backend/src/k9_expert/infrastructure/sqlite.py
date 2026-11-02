@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import secrets
 import sqlite3
 from collections.abc import Callable, Iterator
@@ -12,10 +13,32 @@ from types import TracebackType
 from typing import Literal, NamedTuple, cast
 from uuid import UUID, uuid4
 
-from k9_expert.domain.models import DocumentStatus, JobStage, TraceEvent
+from k9_expert.domain.models import (
+    AnalysisFeedback,
+    AnalysisStatus,
+    BreedAnalysisId,
+    BreedAnalysisProfile,
+    BreedAnalysisReport,
+    BreedCandidate,
+    BreedCriterion,
+    BreedFinding,
+    CacheHitType,
+    CacheLookup,
+    Citation,
+    DocumentId,
+    DocumentStatus,
+    DocumentVersionId,
+    ExecutionMetadata,
+    FindingOutcome,
+    FragmentId,
+    JobStage,
+    SnapshotId,
+    SourceRef,
+    TraceEvent,
+)
 from k9_expert.domain.telemetry import redact
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 CLEANUP_QUEUE_TABLE = """
 CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
@@ -27,6 +50,48 @@ CREATE TABLE IF NOT EXISTS reindex_requests (id TEXT PRIMARY KEY, scope TEXT NOT
   actor_id TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS reindex_jobs (request_id TEXT NOT NULL REFERENCES reindex_requests(id),
   job_id TEXT NOT NULL REFERENCES ingestion_jobs(id), PRIMARY KEY(request_id, job_id));
+"""
+
+BREED_MATCH_TABLES = """
+CREATE TABLE IF NOT EXISTS breed_analyses (
+  id TEXT PRIMARY KEY, status TEXT NOT NULL, profile_json TEXT NOT NULL,
+  snapshot_id TEXT REFERENCES snapshots(id), trace_id TEXT NOT NULL UNIQUE,
+  reason TEXT, execution_json TEXT NOT NULL, limitations_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS breed_analysis_candidates (
+  analysis_id TEXT NOT NULL REFERENCES breed_analyses(id) ON DELETE CASCADE,
+  breed TEXT NOT NULL, rank INTEGER NOT NULL, score REAL, documented_weight REAL NOT NULL,
+  possible_weight REAL NOT NULL, coverage REAL NOT NULL,
+  PRIMARY KEY(analysis_id, breed)
+);
+CREATE TABLE IF NOT EXISTS breed_analysis_findings (
+  id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL, breed TEXT NOT NULL,
+  criterion_key TEXT NOT NULL, criterion_value TEXT NOT NULL, criterion_weight REAL NOT NULL,
+  outcome TEXT NOT NULL, explanation TEXT NOT NULL,
+  FOREIGN KEY(analysis_id, breed) REFERENCES breed_analysis_candidates(analysis_id, breed)
+    ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS breed_analysis_citations (
+  id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES breed_analysis_findings(id) ON DELETE CASCADE,
+  fragment_id TEXT, document_id TEXT, version_id TEXT, title TEXT NOT NULL, author TEXT,
+  edition TEXT, physical_page INTEGER NOT NULL, printed_page_label TEXT
+);
+CREATE TABLE IF NOT EXISTS analysis_feedback (
+  id TEXT PRIMARY KEY, analysis_id TEXT NOT NULL REFERENCES breed_analyses(id) ON DELETE CASCADE,
+  trace_id TEXT NOT NULL, useful INTEGER NOT NULL, comment TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS exact_response_cache (
+  exact_key TEXT PRIMARY KEY, partition_key TEXT NOT NULL, snapshot_id TEXT NOT NULL,
+  value_json TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS semantic_response_cache (
+  id TEXT PRIMARY KEY, exact_key TEXT NOT NULL, partition_key TEXT NOT NULL,
+  snapshot_id TEXT NOT NULL, request_vector_json TEXT NOT NULL, value_json TEXT NOT NULL,
+  expires_at TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS semantic_cache_partition
+  ON semantic_response_cache(partition_key, snapshot_id, expires_at);
 """
 
 SCHEMA = """
@@ -80,7 +145,7 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
   operation TEXT NOT NULL, resource_version TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT);
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
-""" + CLEANUP_QUEUE_TABLE + REINDEX_TABLES
+""" + CLEANUP_QUEUE_TABLE + REINDEX_TABLES + BREED_MATCH_TABLES
 
 
 INDEX_FRAGMENTS_SQL = """SELECT f.id, f.text, f.content_hash, f.version_id, f.page_start,
@@ -158,6 +223,10 @@ class SqliteDatabase:
             if current == 2:
                 connection.executescript(REINDEX_TABLES)
                 connection.execute("PRAGMA user_version = 3")
+                current = 3
+            if current == 3:
+                connection.executescript(BREED_MATCH_TABLES)
+                connection.execute("PRAGMA user_version = 4")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -1022,6 +1091,229 @@ class CacheInvalidator:
 
     def invalidate_snapshot(self, snapshot_id: str) -> None:
         self.invalidated_snapshots.append(snapshot_id)
+
+
+class BreedAnalysisRepository:
+    """Normalized, immutable persistence for BreedMatch reports and feedback."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def save(self, report: BreedAnalysisReport) -> None:
+        profile = {
+            "criteria": [
+                {"key": item.key, "value": item.value, "weight": item.weight}
+                for item in report.profile.criteria
+            ],
+            "candidate_breeds": list(report.profile.candidate_breeds),
+            "document_ids": [str(item) for item in report.profile.document_ids],
+            "policy_version": report.profile.policy_version,
+        }
+        execution = {
+            "route": report.execution.route,
+            "resolved_model": report.execution.resolved_model,
+            "cache_hit": str(report.execution.cache_hit),
+            "agent_iterations": report.execution.agent_iterations,
+            "latency_ms": report.execution.latency_ms,
+        }
+        with self.database.transaction() as connection:
+            connection.execute(
+                """INSERT INTO breed_analyses
+                (id, status, profile_json, snapshot_id, trace_id, reason, execution_json,
+                 limitations_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(report.analysis_id), str(report.status), json.dumps(profile),
+                    str(report.snapshot_id) if report.snapshot_id else None,
+                    report.trace_id or str(uuid4()), report.reason, json.dumps(execution),
+                    json.dumps(report.limitations), now(),
+                ),
+            )
+            for rank, candidate in enumerate(report.candidates, start=1):
+                connection.execute(
+                    "INSERT INTO breed_analysis_candidates VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (str(report.analysis_id), candidate.breed, rank, candidate.score,
+                     candidate.documented_weight, candidate.possible_weight, candidate.coverage),
+                )
+                for finding in candidate.findings:
+                    finding_id = str(uuid4())
+                    connection.execute(
+                        """INSERT INTO breed_analysis_findings VALUES
+                        (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (finding_id, str(report.analysis_id), candidate.breed,
+                         finding.criterion.key, finding.criterion.value,
+                         finding.criterion.weight, str(finding.outcome), finding.explanation),
+                    )
+                    for citation in finding.citations:
+                        source = citation.source
+                        connection.execute(
+                            """INSERT INTO breed_analysis_citations VALUES
+                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (str(uuid4()), finding_id, str(citation.evidence_id),
+                             str(source.document_id), str(source.version_id), source.title,
+                             source.author, source.edition, source.physical_page,
+                             source.printed_page_label),
+                        )
+
+    def get(self, analysis_id: BreedAnalysisId) -> BreedAnalysisReport | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM breed_analyses WHERE id = ?", (str(analysis_id),)
+            ).fetchone()
+            if row is None:
+                return None
+            profile_data = json.loads(str(row["profile_json"]))
+            execution_data = json.loads(str(row["execution_json"]))
+            candidates: list[BreedCandidate] = []
+            for candidate in connection.execute(
+                "SELECT * FROM breed_analysis_candidates WHERE analysis_id = ? ORDER BY rank",
+                (str(analysis_id),),
+            ):
+                findings: list[BreedFinding] = []
+                for finding in connection.execute(
+                    """SELECT * FROM breed_analysis_findings
+                    WHERE analysis_id = ? AND breed = ? ORDER BY rowid""",
+                    (str(analysis_id), candidate["breed"]),
+                ):
+                    citations = tuple(
+                        Citation(
+                            FragmentId(UUID(str(item["fragment_id"]))),
+                            SourceRef(
+                                DocumentId(UUID(str(item["document_id"]))),
+                                DocumentVersionId(UUID(str(item["version_id"]))),
+                                str(item["title"]), item["author"], item["edition"],
+                                int(item["physical_page"]), item["printed_page_label"],
+                            ),
+                        )
+                        for item in connection.execute(
+                            "SELECT * FROM breed_analysis_citations WHERE finding_id = ?",
+                            (finding["id"],),
+                        )
+                    )
+                    findings.append(BreedFinding(
+                        BreedCriterion(str(finding["criterion_key"]),
+                                       str(finding["criterion_value"]),
+                                       float(finding["criterion_weight"])),
+                        FindingOutcome(str(finding["outcome"])),
+                        str(finding["explanation"]), citations,
+                    ))
+                candidates.append(BreedCandidate(
+                    str(candidate["breed"]), tuple(findings),
+                    float(candidate["score"]) if candidate["score"] is not None else None,
+                    float(candidate["documented_weight"]), float(candidate["possible_weight"]),
+                    float(candidate["coverage"]),
+                ))
+        profile = BreedAnalysisProfile(
+            tuple(BreedCriterion(str(item["key"]), str(item["value"]), float(item["weight"]))
+                  for item in profile_data["criteria"]),
+            tuple(profile_data["candidate_breeds"]),
+            tuple(DocumentId(UUID(item)) for item in profile_data["document_ids"]),
+            str(profile_data["policy_version"]),
+        )
+        execution = ExecutionMetadata(
+            execution_data.get("route"), execution_data.get("resolved_model"),
+            CacheHitType(execution_data.get("cache_hit", "miss")),
+            int(execution_data.get("agent_iterations", 0)), execution_data.get("latency_ms"),
+        )
+        return BreedAnalysisReport(
+            analysis_id, AnalysisStatus(str(row["status"])), profile,
+            SnapshotId(UUID(str(row["snapshot_id"]))) if row["snapshot_id"] else None,
+            tuple(candidates), tuple(json.loads(str(row["limitations_json"]))),
+            str(row["trace_id"]), row["reason"], execution,
+        )
+
+    def add_feedback(self, feedback: AnalysisFeedback, trace_id: str) -> str:
+        feedback_id = str(uuid4())
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO analysis_feedback VALUES (?, ?, ?, ?, ?, ?)",
+                (feedback_id, str(feedback.analysis_id), trace_id, int(feedback.useful),
+                 feedback.comment, now()),
+            )
+        return feedback_id
+
+    def expire_feedback_comments(self, before: str) -> int:
+        with self.database.transaction() as connection:
+            return connection.execute(
+                "UPDATE analysis_feedback SET comment = NULL WHERE created_at < ? AND comment IS NOT NULL",
+                (before,),
+            ).rowcount
+
+
+class SqliteResponseCache:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def lookup(self, exact_key: str, *, partition: str, snapshot_id: str,
+               request_vector: list[float] | tuple[float, ...] | None = None,
+               semantic_threshold: float | None = None) -> CacheLookup:
+        timestamp = now()
+        with self.database.connect() as connection:
+            exact = connection.execute(
+                """SELECT value_json FROM exact_response_cache
+                WHERE exact_key = ? AND partition_key = ? AND snapshot_id = ? AND expires_at > ?""",
+                (exact_key, partition, snapshot_id, timestamp),
+            ).fetchone()
+            if exact is not None:
+                return CacheLookup(CacheHitType.EXACT, str(exact["value_json"]))
+            if request_vector is None or semantic_threshold is None:
+                return CacheLookup(CacheHitType.MISS)
+            best: tuple[float, str] | None = None
+            for row in connection.execute(
+                """SELECT request_vector_json, value_json FROM semantic_response_cache
+                WHERE partition_key = ? AND snapshot_id = ? AND expires_at > ?""",
+                (partition, snapshot_id, timestamp),
+            ):
+                score = _cosine(request_vector, json.loads(str(row["request_vector_json"])))
+                if best is None or score > best[0]:
+                    best = (score, str(row["value_json"]))
+        if best is not None and best[0] >= semantic_threshold:
+            return CacheLookup(CacheHitType.SEMANTIC, best[1], best[0])
+        return CacheLookup(CacheHitType.MISS, similarity=best[0] if best else None)
+
+    def store(self, exact_key: str, value: str, *, partition: str, snapshot_id: str,
+              expires_at: str, request_vector: list[float] | tuple[float, ...] | None = None) -> None:
+        timestamp = now()
+        with self.database.transaction() as connection:
+            connection.execute(
+                """INSERT OR REPLACE INTO exact_response_cache
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (exact_key, partition, snapshot_id, value, expires_at, timestamp),
+            )
+            if request_vector is not None:
+                connection.execute(
+                    """INSERT INTO semantic_response_cache VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (str(uuid4()), exact_key, partition, snapshot_id,
+                     json.dumps(request_vector), value, expires_at, timestamp),
+                )
+
+    def invalidate_snapshot(self, snapshot_id: str) -> int:
+        with self.database.transaction() as connection:
+            exact = connection.execute(
+                "DELETE FROM exact_response_cache WHERE snapshot_id = ?", (snapshot_id,)
+            ).rowcount
+            semantic = connection.execute(
+                "DELETE FROM semantic_response_cache WHERE snapshot_id = ?", (snapshot_id,)
+            ).rowcount
+        return exact + semantic
+
+    def purge_expired(self, as_of: str) -> int:
+        with self.database.transaction() as connection:
+            exact = connection.execute(
+                "DELETE FROM exact_response_cache WHERE expires_at <= ?", (as_of,)
+            ).rowcount
+            semantic = connection.execute(
+                "DELETE FROM semantic_response_cache WHERE expires_at <= ?", (as_of,)
+            ).rowcount
+        return exact + semantic
+
+
+def _cosine(left: list[float] | tuple[float, ...], right: list[float]) -> float:
+    if len(left) != len(right) or not left:
+        return -1.0
+    denominator = math.sqrt(sum(value * value for value in left)) * math.sqrt(
+        sum(value * value for value in right)
+    )
+    return sum(a * b for a, b in zip(left, right, strict=True)) / denominator if denominator else -1.0
 
 
 class InteractionRepository:

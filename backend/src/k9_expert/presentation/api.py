@@ -129,6 +129,81 @@ class QueryResponse(BaseModel):
     discrepancy: bool = False
 
 
+class BreedCriterionRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    value: str = Field(min_length=1, max_length=200)
+    weight: float = Field(default=1.0, gt=0, le=10)
+
+
+class BreedAnalysisRequest(BaseModel):
+    schema_version: str = Field(default="1.0", pattern=r"^1(?:\.\d+)?$")
+    criteria: list[BreedCriterionRequest] = Field(min_length=1, max_length=12)
+    candidate_breeds: list[str] = Field(default_factory=list, max_length=12)
+    document_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class AnalysisCitationResponse(BaseModel):
+    id: str | None = None
+    fragment_id: str
+    document_id: str
+    version_id: str
+    title: str
+    physical_page: int
+    printed_page_label: str | None = None
+
+
+class BreedFindingResponse(BaseModel):
+    criterion_key: str
+    criterion_value: str
+    outcome: str
+    explanation: str
+    citations: list[AnalysisCitationResponse] = Field(default_factory=list)
+
+
+class BreedCandidateResponse(BaseModel):
+    breed: str
+    score: float | None
+    documented_weight: float
+    possible_weight: float
+    coverage: float
+    findings: list[BreedFindingResponse] = Field(default_factory=list)
+
+
+class AnalysisExecutionResponse(BaseModel):
+    route: str | None = None
+    resolved_model: str | None = None
+    cache_hit: str = "miss"
+    agent_iterations: int = 0
+    latency_ms: float | None = None
+
+
+class BreedAnalysisResponse(BaseModel):
+    schema_version: str = "1.0"
+    analysis_id: str
+    status: str
+    snapshot_id: str | None
+    criteria: list[BreedCriterionRequest]
+    candidates: list[BreedCandidateResponse] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    trace_id: str | None = None
+    reason: str | None = None
+    execution: AnalysisExecutionResponse = Field(default_factory=AnalysisExecutionResponse)
+
+
+class AnalysisFeedbackRequest(BaseModel):
+    useful: bool
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class AnalysisFeedbackResponse(BaseModel):
+    id: str
+    analysis_id: str
+    trace_id: str
+    useful: int
+    comment: str | None
+    created_at: str
+
+
 class ErrorEnvelope(BaseModel):
     code: str
     message: str

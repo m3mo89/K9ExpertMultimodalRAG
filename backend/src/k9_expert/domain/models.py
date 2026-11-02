@@ -15,6 +15,7 @@ SnapshotId = NewType("SnapshotId", UUID)
 QueryId = NewType("QueryId", UUID)
 ConversationId = NewType("ConversationId", UUID)
 JobId = NewType("JobId", UUID)
+BreedAnalysisId = NewType("BreedAnalysisId", UUID)
 
 
 class DocumentStatus(StrEnum):
@@ -45,6 +46,33 @@ class QueryStatus(StrEnum):
     REJECTED = "rejected"
     UNVERIFIED = "unverified"
     UNAVAILABLE = "unavailable"
+
+
+class AnalysisStatus(StrEnum):
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    ABSTAINED = "abstained"
+    REJECTED = "rejected"
+    UNAVAILABLE = "unavailable"
+
+
+class FindingOutcome(StrEnum):
+    MATCH = "match"
+    MISMATCH = "mismatch"
+    NOT_DOCUMENTED = "not_documented"
+
+
+class GuardrailAction(StrEnum):
+    ALLOW = "allow"
+    BLOCK = "block"
+    RETRY = "retry"
+    ABSTAIN = "abstain"
+
+
+class CacheHitType(StrEnum):
+    MISS = "miss"
+    EXACT = "exact"
+    SEMANTIC = "semantic"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +115,90 @@ class QueryCommand:
 class Citation:
     evidence_id: FragmentId
     source: SourceRef
+
+
+@dataclass(frozen=True, slots=True)
+class BreedCriterion:
+    """One normalized, documentable preference in a versioned profile."""
+
+    key: str
+    value: str
+    weight: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class BreedAnalysisProfile:
+    criteria: tuple[BreedCriterion, ...]
+    candidate_breeds: tuple[str, ...] = ()
+    document_ids: tuple[DocumentId, ...] = ()
+    policy_version: str = "breed-match-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class BreedFinding:
+    criterion: BreedCriterion
+    outcome: FindingOutcome
+    explanation: str
+    citations: tuple[Citation, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class BreedCandidate:
+    breed: str
+    findings: tuple[BreedFinding, ...]
+    score: float | None
+    documented_weight: float
+    possible_weight: float
+    coverage: float
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionMetadata:
+    route: str | None = None
+    resolved_model: str | None = None
+    cache_hit: CacheHitType = CacheHitType.MISS
+    agent_iterations: int = 0
+    latency_ms: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BreedAnalysisReport:
+    analysis_id: BreedAnalysisId
+    status: AnalysisStatus
+    profile: BreedAnalysisProfile
+    snapshot_id: SnapshotId | None
+    candidates: tuple[BreedCandidate, ...] = ()
+    limitations: tuple[str, ...] = ()
+    trace_id: str | None = None
+    reason: str | None = None
+    execution: ExecutionMetadata = field(default_factory=ExecutionMetadata)
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisFeedback:
+    analysis_id: BreedAnalysisId
+    useful: bool
+    comment: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GuardrailDecision:
+    action: GuardrailAction
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RouteDecision:
+    alias: str
+    reason: str
+    policy_version: str
+
+
+@dataclass(frozen=True, slots=True)
+class CacheLookup:
+    hit_type: CacheHitType
+    value: str | None = None
+    similarity: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

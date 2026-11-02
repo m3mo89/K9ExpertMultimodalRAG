@@ -20,8 +20,13 @@ embedding_dimensions = 768
 embedding_query_prefix = "search_query: "
 embedding_document_prefix = "search_document: "
 generation_timeout_seconds = 120
+generation_max_retries = 1
 generation_context_window = 8192
 embedding_timeout_seconds = 120
+text_simple_model = "llama3.2:3b"
+# Provisional until the fixed two-model benchmark and human review are complete.
+text_complex_model = "qwen3.5:2b"
+text_fallback_model = "llama3.2:3b"
 
 [upload]
 max_file_bytes = 104857600
@@ -50,6 +55,24 @@ sufficiency_minimum_score = 0.68
 
 [cache]
 exact_response_enabled = true
+exact_ttl_seconds = 3600
+semantic_ttl_seconds = 1800
+# Provisional; must pass paraphrase and profile-separation held-out cases.
+semantic_threshold = 0.92
+
+[guardrails]
+policy_version = "guardrails-v1"
+
+[agent]
+max_iterations = 2
+
+[router]
+policy_version = "router-v1"
+
+[breed_match]
+policy_version = "breed-match-v1"
+minimum_coverage = 0.5
+max_candidates = 5
 
 [retention]
 trace_days = 30

@@ -79,6 +79,20 @@ class ApplicationSettings:
     feedback_comment_retention_days: int = 90
     # Privileged troubleshooting only: keeps full questions in stored traces.
     trace_store_protected: bool = False
+    guardrail_policy_version: str = "guardrails-v1"
+    exact_cache_ttl_seconds: int = 3600
+    semantic_cache_ttl_seconds: int = 1800
+    semantic_cache_threshold: float = 0.92
+    agent_max_iterations: int = 2
+    router_policy_version: str = "router-v1"
+    text_simple_model: str = "llama3.2:3b"
+    text_complex_model: str = "qwen3.5:2b"
+    text_fallback_model: str = "llama3.2:3b"
+    model_max_retries: int = 1
+    model_timeout_seconds: int = 120
+    breed_match_policy_version: str = "breed-match-v1"
+    breed_match_minimum_coverage: float = 0.5
+    breed_match_max_candidates: int = 5
 
     @property
     def files_dir(self) -> Path:
@@ -131,6 +145,20 @@ _TOML_FIELDS = {
     ("retention", "feedback_comment_days"): "feedback_comment_retention_days",
     ("retention", "deleted_source_days"): "deleted_source_retention_days",
     ("telemetry", "store_protected"): "trace_store_protected",
+    ("guardrails", "policy_version"): "guardrail_policy_version",
+    ("cache", "exact_ttl_seconds"): "exact_cache_ttl_seconds",
+    ("cache", "semantic_ttl_seconds"): "semantic_cache_ttl_seconds",
+    ("cache", "semantic_threshold"): "semantic_cache_threshold",
+    ("agent", "max_iterations"): "agent_max_iterations",
+    ("router", "policy_version"): "router_policy_version",
+    ("models", "text_simple_model"): "text_simple_model",
+    ("models", "text_complex_model"): "text_complex_model",
+    ("models", "text_fallback_model"): "text_fallback_model",
+    ("models", "generation_max_retries"): "model_max_retries",
+    ("models", "generation_timeout_seconds"): "model_timeout_seconds",
+    ("breed_match", "policy_version"): "breed_match_policy_version",
+    ("breed_match", "minimum_coverage"): "breed_match_minimum_coverage",
+    ("breed_match", "max_candidates"): "breed_match_max_candidates",
 }
 
 

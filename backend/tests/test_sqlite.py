@@ -9,6 +9,8 @@ from k9_expert.infrastructure.filesystem import (
     StagedFileNotFoundError,
 )
 from k9_expert.infrastructure.sqlite import (
+    BREED_MATCH_TABLES,
+    SCHEMA_VERSION,
     ContentRepository,
     DocumentRepository,
     JobRepository,
@@ -39,6 +41,43 @@ def test_newer_schema_fails_without_mutating(tmp_path: Path) -> None:
         connection.execute("PRAGMA user_version = 999")
     with pytest.raises(UnsupportedSchemaError):
         database.migrate()
+
+
+def test_v3_migration_is_additive_and_preserves_existing_rows(tmp_path: Path) -> None:
+    database = SqliteDatabase(tmp_path / "legacy.sqlite")
+    database.migrate()
+    document_id = str(uuid4())
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO documents VALUES (?, 'Legacy', NULL, NULL, 'active', NULL, 'a', 'b')",
+            (document_id,),
+        )
+        for table in (
+            "breed_analysis_citations",
+            "breed_analysis_findings",
+            "breed_analysis_candidates",
+            "analysis_feedback",
+            "breed_analyses",
+            "exact_response_cache",
+            "semantic_response_cache",
+        ):
+            connection.execute(f"DROP TABLE {table}")
+        connection.execute("PRAGMA user_version = 3")
+
+    database.migrate()
+
+    with database.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert connection.execute(
+            "SELECT title FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()["title"] == "Legacy"
+        tables = {
+            row["name"]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+    assert "breed_analyses" in tables
+    assert "semantic_response_cache" in tables
+    assert "CREATE TABLE" in BREED_MATCH_TABLES
 
 
 def test_managed_file_store_uses_content_hash_and_atomic_destination(tmp_path: Path) -> None:
