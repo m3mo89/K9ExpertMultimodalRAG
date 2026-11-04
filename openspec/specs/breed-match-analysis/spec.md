@@ -6,15 +6,19 @@ TBD - created by syncing change adapt-k9-expert-to-rubric. Update Purpose after 
 ## Requirements
 
 ### Requirement: Structured breed analysis request
-The system SHALL expose a versioned REST operation that accepts bounded, validated hunting-dog comparison criteria and SHALL identify unsupported or non-documentable criteria before model invocation.
+The system SHALL expose versioned REST operations that accept either bounded controlled documentary criteria or a validated hunter profile, SHALL preserve original profile answers alongside normalized dimensions, and SHALL identify unsupported, ambiguous or decision-incomplete input before model invocation.
 
-#### Scenario: Submit supported criteria
-- **WHEN** a user submits one or more supported activity, morphology, size, coat, or work-aptitude criteria
+#### Scenario: Submit supported advanced criteria
+- **WHEN** a user submits one or more supported activity, morphology, size, coat, or work-aptitude criteria through the advanced flow
 - **THEN** the system creates a breed analysis bound to the active corpus snapshot and returns its identifier and trace identifier
 
-#### Scenario: Submit invalid criteria
-- **WHEN** a request contains no usable criteria, invalid controlled values, or exceeds configured limits
-- **THEN** the system rejects it with stable field-level reason codes before retrieval or generation
+#### Scenario: Submit complete hunter profile
+- **WHEN** a user submits all decision-critical profile answers
+- **THEN** the system records the original answers, derives normalized recommendation dimensions with a versioned translator, and binds the recommendation to the active knowledge snapshot
+
+#### Scenario: Submit incomplete or invalid profile
+- **WHEN** a request contains invalid controlled values, exceeds configured limits, or lacks a decision-critical answer
+- **THEN** the system rejects or marks it incomplete with stable field-level reason codes before retrieval, scoring or generation
 
 ### Requirement: Evidence-derived candidates and findings
 The system SHALL derive breed candidates and per-criterion findings from eligible corpus evidence and SHALL represent each finding as `match`, `mismatch`, or `not_documented` with resolvable evidence where applicable. When the request names no candidate breeds, the system SHALL select the candidate pool from the active breed registry by retrieving evidence for the requested criteria and keeping the breeds of the best-scoring evidence, bounded by a configured pool size, rather than by a fixed list or by fragment counts. Explicitly named candidates SHALL be resolved through the breed registry.
@@ -36,15 +40,23 @@ The system SHALL derive breed candidates and per-criterion findings from eligibl
 - **THEN** the system rejects the request with a field-level `breed_not_found` reason before retrieval
 
 ### Requirement: Transparent deterministic comparison
-The system SHALL calculate ordering or compatibility scores using a versioned deterministic policy with visible criteria, weights, denominators, and treatment of undocumented values; a language model MUST NOT create or alter scores.
+The system SHALL calculate ordering and compatibility using a versioned deterministic policy with visible dimensions, weights, constraints, documented penalties, denominators and treatment of unknown or conflicting values; a language model MUST NOT create or alter candidate eligibility, scores, bands or ordering.
 
 #### Scenario: Produce ranked candidates
-- **WHEN** at least two candidates have sufficient documented findings
-- **THEN** the response explains every candidate score from the versioned weights and evidence-bearing findings
+- **WHEN** at least two candidates have sufficient approved knowledge across the profile dimensions
+- **THEN** the response explains every candidate result through its dimension values, weights, penalties, evidence coverage, conflicts and policy version
 
-#### Scenario: Evidence is too incomplete for a score
-- **WHEN** a candidate does not meet the configured minimum documented-criteria coverage
-- **THEN** the system omits or qualifies its score and exposes the missing coverage instead of presenting false precision
+#### Scenario: Evidence is incomplete
+- **WHEN** a candidate does not meet the configured minimum documented-dimension coverage
+- **THEN** the system omits its compatibility band or qualifies it and exposes the missing coverage instead of presenting false precision
+
+#### Scenario: Attribute is unknown
+- **WHEN** an attribute has no approved evidence for a candidate
+- **THEN** that attribute lowers coverage but neither increases nor decreases compatibility
+
+#### Scenario: Hard constraint excludes a candidate
+- **WHEN** the user explicitly marks a constraint as required and approved evidence establishes a policy-defined incompatibility
+- **THEN** the system excludes or clearly disqualifies the candidate and exposes the rule and citations that caused the decision
 
 ### Requirement: Structured cited report
 The system SHALL return criteria used, candidate breeds, a comparison table, documented characteristics, match explanations, citations, unknowns, limitations, execution metadata, and trace identifier in a validated response schema.
@@ -58,8 +70,27 @@ The system SHALL return criteria used, candidate breeds, a comparison table, doc
 - **THEN** the system returns an explicit abstained or partial report with limitations and no unsupported recommendation
 
 ### Requirement: Primary web product flow
-The web application SHALL present BreedMatch as its primary workflow, consume it exclusively through the REST API, and retain grounded chat and document management as secondary navigation.
+The web application SHALL present guided recommendation as its primary workflow, consume versioned recommendation operations exclusively through the REST API, retain advanced BreedMatch, grounded chat and document management as secondary navigation, and permit comparison of two or three returned breeds.
 
-#### Scenario: Use the product without chat
-- **WHEN** a user opens the application, submits criteria, and reviews a report
-- **THEN** the complete useful workflow succeeds without opening or sending a chat message
+#### Scenario: Use guided recommendation without chat
+- **WHEN** a user completes a hunter profile and reviews supported results
+- **THEN** the complete useful workflow provides no more than three ranked results, per-dimension explanations, limitations, coverage and citations without requiring a chat interaction
+
+#### Scenario: Fewer than three breeds are supported
+- **WHEN** fewer than three candidates meet the evidence and policy thresholds
+- **THEN** the application shows only supported candidates and explains why additional recommendations were not presented
+
+#### Scenario: Compare returned breeds
+- **WHEN** a user selects two or three recommendation results
+- **THEN** the application compares modalities, terrain, activity, training, care and evidence coverage without inventing unavailable values or absolute conclusions
+
+### Requirement: Reproducible recommendation record
+The system SHALL persist the hunter-profile snapshot, knowledge snapshot, recommendation policy and translator versions, candidate breakdown, evidence references and final ordering needed to replay and explain a recommendation.
+
+#### Scenario: Replay identical recommendation inputs
+- **WHEN** the same normalized profile, eligible knowledge snapshot and policy version are evaluated again
+- **THEN** the system produces the same candidate eligibility, dimension values and ordering independently of Ollama availability
+
+#### Scenario: Ollama is unavailable
+- **WHEN** local narrative generation is unavailable after deterministic scoring succeeds
+- **THEN** the system returns the recommendation breakdown and citations with a narrative-unavailable limitation
