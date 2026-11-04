@@ -304,3 +304,27 @@ sequenceDiagram
     Or-->>Or: abstención sin generación; decisiones registradas en la traza
   end
 ```
+
+## Diagrama final. Recomendación guiada v2
+
+```mermaid
+flowchart LR
+  profile[Perfil del cazador] --> translator[Traductor versionado]
+  translator --> engine[Motor determinista]
+  assertions[Afirmaciones revisadas\ncon evidencia] --> engine
+  engine --> result[Top 3 + cobertura\nconflictos + limitaciones]
+  result --> context[Contexto de chat inmutable]
+  context --> explanation[Explicación acotada]
+  assertions --> snapshot[Snapshot publicado]
+```
+
+El puntaje lee sólo afirmaciones aprobadas de SQLite asociadas al snapshot. Chroma sigue siendo
+un índice derivado para evidencia; Ollama puede redactar narrativa validada, pero no crea ni altera
+orden, compatibilidad, cobertura o citas.
+
+Las afirmaciones nacen como candidatas en la ingesta (`application/assertion_extraction.py`, valores
+en el vocabulario del perfil), y solo un revisor autorizado las aprueba con
+`POST /api/v2/admin/assertions/{id}/review`. El traductor (`application/profile_translation.py`) y el
+motor (`application/recommendation.py`) son deterministas y versionados; cada recomendación guarda
+perfil original, dimensiones normalizadas, snapshot, versiones y orden para poder reproducirla.
+

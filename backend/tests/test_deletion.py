@@ -97,3 +97,18 @@ def test_schema_one_migrates_cleanup_queue(tmp_path) -> None:
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE name = 'cleanup_queue'"
         ).fetchone() is not None
+
+
+def test_deleted_document_content_can_be_uploaded_again(tmp_path) -> None:
+    database = SqliteDatabase(tmp_path / "k9.sqlite")
+    database.migrate()
+    documents = DocumentRepository(database)
+    document_id, version_id = uuid4(), uuid4()
+    documents.create_document(document_id, "Libro", None, None)
+    documents.create_version(version_id, document_id, "hash", "libro.pdf", "/managed/libro.pdf")
+    assert documents.find_version_by_content_hash("hash") == str(version_id)
+
+    documents.mark_deleted_and_schedule_cleanup(str(document_id), "2099-01-01T00:00:00+00:00")
+
+    assert documents.find_version_by_content_hash("hash") is None
+    assert not documents.file_referenced_by_live_document("/managed/libro.pdf")

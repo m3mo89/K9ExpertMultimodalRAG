@@ -14,6 +14,9 @@ import type {
   ErrorEnvelope,
   Feedback,
   HealthReport,
+  HunterProfileRequest,
+  HunterProfileValidation,
+  HunterRecommendation,
   Job,
   ModelConfiguration,
   OperationalMetrics,
@@ -23,6 +26,9 @@ import type {
   QueryRequest,
   QueryResponse,
   ReindexProgress,
+  RecommendationChatContext,
+  RecommendationContextAnswer,
+  StructuredBreedProfile,
   UploadResult,
 } from './types'
 
@@ -85,7 +91,8 @@ export class ApiClient {
     }
     let response: Response
     try {
-      response = await this.fetchImpl(`${API_BASE}${path}`, {
+      const url = path.startsWith('/api/') ? path : `${API_BASE}${path}`
+      response = await this.fetchImpl(url, {
         method: options.method ?? 'GET',
         headers,
         body,
@@ -139,6 +146,28 @@ export class ApiClient {
   listBreeds = () => this.request<BreedSummary[]>('/breeds')
   breedProfile = (breed: string) =>
     this.request<BreedProfile>(`/breeds/${encodeURIComponent(breed)}/profile`)
+  validateHunterProfile = (profile: HunterProfileRequest, signal?: AbortSignal) =>
+    this.request<HunterProfileValidation>('/api/v2/hunter-profiles/validate', {
+      method: 'POST', body: profile, signal,
+    })
+  submitRecommendation = (profile: HunterProfileRequest, signal?: AbortSignal) =>
+    this.request<HunterRecommendation>('/api/v2/recommendations', {
+      method: 'POST', body: profile, signal,
+    })
+  structuredBreedProfile = (breed: string, snapshotId: string) =>
+    this.request<StructuredBreedProfile>(
+      `/api/v2/breeds/${encodeURIComponent(breed)}/structured-profile?snapshot_id=${encodeURIComponent(snapshotId)}`,
+    )
+  createRecommendationContext = (recommendationId: string, selectedBreeds: string[]) =>
+    this.request<RecommendationChatContext>(
+      `/api/v2/recommendations/${encodeURIComponent(recommendationId)}/chat-context`,
+      { method: 'POST', body: { selected_breeds: selectedBreeds } },
+    )
+  queryRecommendationContext = (contextId: string, text: string) =>
+    this.request<RecommendationContextAnswer>(
+      `/api/v2/recommendation-contexts/${encodeURIComponent(contextId)}/queries`,
+      { method: 'POST', body: { text } },
+    )
   configuration = () => this.request<ModelConfiguration>('/configuration')
   listDocuments = () => this.request<DocumentSummary[]>('/documents')
   listVersions = (documentId: string) =>

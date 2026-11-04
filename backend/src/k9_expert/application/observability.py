@@ -134,6 +134,10 @@ class TelemetryService:
             cast(dict[str, Any], item["attributes"])
             for item in self.traces.list(kind="ingestion", since=since, limit=10_000)
         ]
+        recommendations = [
+            cast(dict[str, Any], item["attributes"])
+            for item in self.traces.list(kind="recommendation", since=since, limit=10_000)
+        ]
         latencies = sorted(float(item["total_ms"]) for item in queries)
         cache_hits = sum(1 for item in queries if item.get("cache_hit"))
         abstained = sum(1 for item in queries if item.get("status") == "abstained")
@@ -165,6 +169,19 @@ class TelemetryService:
                 ),
             },
             "errors": dict(errors),
+            "recommendations": {
+                "states": dict(Counter(str(item.get("status")) for item in recommendations)),
+                "coverage_bands": dict(Counter(
+                    "high" if float(value) >= 0.75 else "moderate" if float(value) >= 0.5 else "low"
+                    for item in recommendations for value in item.get("coverage", [])
+                )),
+                "conflicts": sum(int(item.get("conflicts", 0)) for item in recommendations),
+                "usefulness": dict(Counter(
+                    str(item.get("useful"))
+                    for item in recommendations
+                    if item.get("useful") is not None
+                )),
+            },
             "layers": self._layers(queries, since),
         }
 
@@ -174,7 +191,11 @@ class TelemetryService:
             cast(dict[str, Any], item["attributes"])
             for item in self.traces.list(kind="breed_analysis", since=since, limit=10_000)
         ]
-        traces = queries + analyses
+        recommendations = [
+            cast(dict[str, Any], item["attributes"])
+            for item in self.traces.list(kind="recommendation", since=since, limit=10_000)
+        ]
+        traces = queries + analyses + recommendations
         durations: dict[str, list[float]] = {}
         for item in traces:
             for stage in item.get("stages", []):

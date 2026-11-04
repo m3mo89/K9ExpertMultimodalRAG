@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -21,9 +22,14 @@ from k9_expert.domain.breed_vocabulary import (
 from k9_expert.domain.models import (
     AnalysisFeedback,
     AnalysisStatus,
+    AssertionEvidenceState,
+    AssertionExtractionState,
+    AssertionPolarity,
     BreedAnalysisId,
     BreedAnalysisProfile,
     BreedAnalysisReport,
+    BreedAssertion,
+    BreedAssertionEvidence,
     BreedCandidate,
     BreedCriterion,
     BreedFinding,
@@ -37,13 +43,55 @@ from k9_expert.domain.models import (
     FindingOutcome,
     FragmentId,
     JobStage,
+    RecommendationResult,
+    ReviewDecision,
     SnapshotId,
     SourceRef,
     TraceEvent,
 )
 from k9_expert.domain.telemetry import redact
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
+
+STRUCTURED_KNOWLEDGE_TABLES = """
+CREATE TABLE IF NOT EXISTS assertion_candidates (
+  id TEXT PRIMARY KEY, breed TEXT NOT NULL, attribute_key TEXT NOT NULL, value TEXT NOT NULL,
+  polarity TEXT NOT NULL, evidence_state TEXT NOT NULL, extraction_state TEXT NOT NULL,
+  extraction_method TEXT NOT NULL, policy_version TEXT NOT NULL, content_identity TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assertion_evidence (
+  assertion_id TEXT NOT NULL REFERENCES assertion_candidates(id) ON DELETE CASCADE,
+  fragment_id TEXT NOT NULL REFERENCES fragments(id) ON DELETE CASCADE,
+  PRIMARY KEY(assertion_id, fragment_id)
+);
+CREATE TABLE IF NOT EXISTS assertion_reviews (
+  assertion_id TEXT PRIMARY KEY REFERENCES assertion_candidates(id) ON DELETE CASCADE,
+  reviewer_id TEXT NOT NULL, decision TEXT NOT NULL, comment TEXT, reviewed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS snapshot_assertions (
+  snapshot_id TEXT NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
+  assertion_id TEXT NOT NULL REFERENCES assertion_candidates(id) ON DELETE CASCADE,
+  PRIMARY KEY(snapshot_id, assertion_id)
+);
+CREATE INDEX IF NOT EXISTS assertion_candidates_breed_attribute
+  ON assertion_candidates(breed, attribute_key);
+"""
+
+RECOMMENDATION_TABLES = """
+CREATE TABLE IF NOT EXISTS recommendations (
+  id TEXT PRIMARY KEY, profile_json TEXT NOT NULL, policy_version TEXT NOT NULL,
+  snapshot_id TEXT REFERENCES snapshots(id), result_json TEXT NOT NULL,
+  trace_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
+);
+"""
+
+RECOMMENDATION_CONTEXT_TABLES = """
+CREATE TABLE IF NOT EXISTS recommendation_chat_contexts (
+  id TEXT PRIMARY KEY, recommendation_id TEXT NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
+  selected_breeds_json TEXT NOT NULL, allowed_evidence_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+"""
 
 CLEANUP_QUEUE_TABLE = """
 CREATE TABLE IF NOT EXISTS cleanup_queue (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id),
@@ -173,7 +221,11 @@ CREATE TABLE IF NOT EXISTS confirmation_tokens (token_hash TEXT PRIMARY KEY, act
 CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT, action TEXT NOT NULL, resource_id TEXT,
   attributes_json TEXT NOT NULL, created_at TEXT NOT NULL);
 """ + CLEANUP_QUEUE_TABLE + REINDEX_TABLES + BREED_MATCH_TABLES + FRAGMENT_CLASSIFICATION_TABLE
-SCHEMA += BREED_ANALYSIS_SUMMARY_COLUMN + BREED_DISCOVERY_TABLE
+SCHEMA += (
+    BREED_ANALYSIS_SUMMARY_COLUMN + BREED_DISCOVERY_TABLE + STRUCTURED_KNOWLEDGE_TABLES
+    + RECOMMENDATION_TABLES
+    + RECOMMENDATION_CONTEXT_TABLES
+)
 
 
 INDEX_FRAGMENTS_SQL = """SELECT f.id, f.text, f.content_hash, f.version_id, f.page_start,
@@ -246,6 +298,8 @@ class SqliteDatabase:
                 connection.executescript(SCHEMA)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 return
+            if current < SCHEMA_VERSION:
+                self.backup_before_migration(connection, current)
             # Additive, ordered upgrades; each step leaves a valid schema version behind.
             if current == 1:
                 connection.executescript(CLEANUP_QUEUE_TABLE)
@@ -277,6 +331,30 @@ class SqliteDatabase:
             if current == 6:
                 connection.executescript(BREED_DISCOVERY_TABLE)
                 connection.execute("PRAGMA user_version = 7")
+                current = 7
+            if current == 7:
+                connection.executescript(STRUCTURED_KNOWLEDGE_TABLES)
+                connection.execute("PRAGMA user_version = 8")
+                current = 8
+            if current == 8:
+                connection.executescript(RECOMMENDATION_TABLES)
+                connection.execute("PRAGMA user_version = 9")
+                current = 9
+            if current == 9:
+                connection.executescript(RECOMMENDATION_CONTEXT_TABLES)
+                connection.execute("PRAGMA user_version = 10")
+
+    def backup_before_migration(self, connection: sqlite3.Connection, version: int) -> Path:
+        """Copy the database before upgrading: an older binary rejects newer schemas, so
+        rollback means stopping services and restoring this copy."""
+        directory = self.path.parent / "migration-backups"
+        directory.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = directory / f"{self.path.stem}-v{version}-{stamp}.sqlite"
+        with sqlite3.connect(target) as copy:
+            connection.backup(copy)
+        copy.close()
+        return target
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -293,6 +371,228 @@ class SqliteDatabase:
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+class StructuredKnowledgeRepository:
+    """Authoritative assertion candidates, reviews and snapshot-scoped approved knowledge."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def create_candidate(
+        self,
+        *,
+        assertion_id: UUID,
+        breed: str,
+        attribute_key: str,
+        value: str,
+        polarity: AssertionPolarity,
+        fragment_ids: Sequence[str],
+        extraction_method: str,
+        policy_version: str,
+        extraction_state: AssertionExtractionState = AssertionExtractionState.CANDIDATE,
+    ) -> str:
+        if not fragment_ids or not all((breed.strip(), attribute_key.strip(), value.strip())):
+            raise ValueError("assertion_candidate_invalid")
+        identity = hashlib.sha256(
+            json.dumps(
+                [breed, attribute_key, value, polarity, sorted(set(fragment_ids)), policy_version],
+                ensure_ascii=False,
+            ).encode()
+        ).hexdigest()
+        with self.database.transaction() as connection:
+            marks = ",".join("?" for _ in fragment_ids)
+            found = connection.execute(
+                f"SELECT COUNT(*) FROM fragments WHERE id IN ({marks})", tuple(fragment_ids)
+            ).fetchone()[0]
+            if found != len(set(fragment_ids)):
+                raise ValueError("assertion_evidence_invalid")
+            try:
+                connection.execute(
+                    """INSERT INTO assertion_candidates VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(assertion_id), breed, attribute_key, value, str(polarity),
+                        str(AssertionEvidenceState.DOCUMENTED), str(extraction_state),
+                        extraction_method, policy_version, identity, now(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                if "content_identity" in str(error):
+                    row = connection.execute(
+                        "SELECT id FROM assertion_candidates WHERE content_identity = ?", (identity,)
+                    ).fetchone()
+                    if row is not None:
+                        return str(row["id"])
+                raise
+            connection.executemany(
+                "INSERT INTO assertion_evidence VALUES (?, ?)",
+                [(str(assertion_id), fragment_id) for fragment_id in dict.fromkeys(fragment_ids)],
+            )
+        return str(assertion_id)
+
+    def review(
+        self, assertion_id: str, reviewer_id: str, decision: ReviewDecision,
+        snapshot_id: str | None, comment: str | None = None,
+    ) -> None:
+        if not reviewer_id.strip():
+            raise ValueError("reviewer_required")
+        with self.database.transaction() as connection:
+            exists = connection.execute(
+                "SELECT id FROM assertion_candidates WHERE id = ?", (assertion_id,)
+            ).fetchone()
+            if exists is None:
+                raise KeyError("assertion_not_found")
+            if decision == ReviewDecision.APPROVED and snapshot_id is None:
+                raise ValueError("snapshot_required")
+            connection.execute(
+                """INSERT INTO assertion_reviews VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(assertion_id) DO UPDATE SET reviewer_id=excluded.reviewer_id,
+                decision=excluded.decision, comment=excluded.comment, reviewed_at=excluded.reviewed_at""",
+                (assertion_id, reviewer_id, str(decision), comment, now()),
+            )
+            connection.execute(
+                "UPDATE assertion_candidates SET extraction_state = ? WHERE id = ?",
+                (str(AssertionExtractionState.REVIEWED), assertion_id),
+            )
+            connection.execute(
+                "DELETE FROM snapshot_assertions WHERE assertion_id = ?", (assertion_id,)
+            )
+            if decision == ReviewDecision.APPROVED:
+                connection.execute(
+                    "INSERT INTO snapshot_assertions VALUES (?, ?)",
+                    (snapshot_id, assertion_id),
+                )
+
+    def candidates(self, state: str | None = None) -> list[dict[str, object]]:
+        where = "WHERE a.extraction_state = ?" if state else ""
+        parameters: tuple[object, ...] = (state,) if state else ()
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                f"""SELECT a.*, r.reviewer_id, r.decision, r.comment, r.reviewed_at,
+                GROUP_CONCAT(e.fragment_id) AS fragment_ids
+                FROM assertion_candidates a
+                LEFT JOIN assertion_reviews r ON r.assertion_id = a.id
+                LEFT JOIN assertion_evidence e ON e.assertion_id = a.id
+                {where} GROUP BY a.id ORDER BY a.created_at""", parameters,
+            ).fetchall()
+        return [
+            {**dict(row), "fragment_ids": str(row["fragment_ids"] or "").split(",")}
+            for row in rows
+        ]
+
+    def approved(self, snapshot_id: str, breed: str | None = None) -> tuple[BreedAssertion, ...]:
+        breed_clause = "AND a.breed = ?" if breed is not None else ""
+        parameters: tuple[object, ...] = (snapshot_id, breed) if breed else (snapshot_id,)
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                f"""SELECT a.*, r.decision, f.id AS fragment_id, f.page_start,
+                f.version_id, v.document_id, v.edition, d.title, d.author,
+                p.printed_page_label
+                FROM snapshot_assertions sa
+                JOIN assertion_candidates a ON a.id = sa.assertion_id
+                JOIN assertion_reviews r ON r.assertion_id = a.id AND r.decision = 'approved'
+                JOIN assertion_evidence ae ON ae.assertion_id = a.id
+                JOIN fragments f ON f.id = ae.fragment_id
+                JOIN snapshot_membership sm ON sm.snapshot_id = sa.snapshot_id
+                  AND sm.fragment_id = f.id
+                JOIN document_versions v ON v.id = f.version_id
+                JOIN documents d ON d.id = v.document_id
+                LEFT JOIN pages p ON p.version_id = f.version_id
+                  AND p.physical_page = f.page_start
+                WHERE sa.snapshot_id = ? {breed_clause}
+                ORDER BY a.breed, a.attribute_key, a.id, f.page_start""", parameters,
+            ).fetchall()
+        grouped: dict[str, list[sqlite3.Row]] = {}
+        for row in rows:
+            grouped.setdefault(str(row["id"]), []).append(row)
+        return tuple(self._assertion(values) for values in grouped.values())
+
+    @staticmethod
+    def _assertion(rows: list[sqlite3.Row]) -> BreedAssertion:
+        first = rows[0]
+        evidence = tuple(
+            BreedAssertionEvidence(
+                FragmentId(UUID(str(row["fragment_id"]))),
+                SourceRef(
+                    DocumentId(UUID(str(row["document_id"]))),
+                    DocumentVersionId(UUID(str(row["version_id"]))),
+                    str(row["title"]), row["author"], row["edition"],
+                    int(row["page_start"]), row["printed_page_label"],
+                ),
+            )
+            for row in rows
+        )
+        return BreedAssertion(
+            UUID(str(first["id"])), str(first["breed"]), str(first["attribute_key"]),
+            str(first["value"]), AssertionPolarity(str(first["polarity"])),
+            AssertionEvidenceState(str(first["evidence_state"])),
+            AssertionExtractionState(str(first["extraction_state"])),
+            str(first["extraction_method"]), str(first["policy_version"]), evidence,
+            ReviewDecision(str(first["decision"])),
+        )
+
+
+class RecommendationRepository:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def save(self, result: RecommendationResult) -> None:
+        payload = json.dumps(asdict(result), ensure_ascii=False, default=str)
+        profile = json.dumps(asdict(result.profile), ensure_ascii=False, default=str)
+        with self.database.transaction() as connection:
+            connection.execute(
+                """INSERT OR REPLACE INTO recommendations
+                (id, profile_json, policy_version, snapshot_id, result_json, trace_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(result.recommendation_id), profile, result.policy_version,
+                    str(result.snapshot_id) if result.snapshot_id else None, payload,
+                    result.trace_id or str(uuid4()), now(),
+                ),
+            )
+
+    def get(self, recommendation_id: str) -> dict[str, object]:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT result_json FROM recommendations WHERE id = ?", (recommendation_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError("recommendation_not_found")
+        return cast(dict[str, object], json.loads(str(row["result_json"])))
+
+
+class RecommendationContextRepository:
+    def __init__(self, database: SqliteDatabase) -> None:
+        self.database = database
+
+    def save(
+        self, context_id: UUID, recommendation_id: str, selected_breeds: Sequence[str],
+        allowed_evidence: Sequence[str],
+    ) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO recommendation_chat_contexts VALUES (?, ?, ?, ?, ?)",
+                (
+                    str(context_id), recommendation_id, json.dumps(list(selected_breeds)),
+                    json.dumps(list(allowed_evidence)), now(),
+                ),
+            )
+
+    def get(self, context_id: str) -> dict[str, object]:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM recommendation_chat_contexts WHERE id = ?", (context_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError("recommendation_context_not_found")
+        return {
+            "id": str(row["id"]),
+            "recommendation_id": str(row["recommendation_id"]),
+            "selected_breeds": json.loads(str(row["selected_breeds_json"])),
+            "allowed_evidence": json.loads(str(row["allowed_evidence_json"])),
+            "created_at": str(row["created_at"]),
+        }
 
 
 class DocumentRepository:
@@ -418,9 +718,12 @@ class DocumentRepository:
         return None if row is None else str(row["value"])
 
     def find_version_by_content_hash(self, content_hash: str) -> str | None:
+        # Deleted documents do not block re-uploading the same PDF; cleanup keeps shared files.
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT id FROM document_versions WHERE content_hash = ?", (content_hash,)
+                "SELECT v.id FROM document_versions v JOIN documents d ON d.id = v.document_id "
+                "WHERE v.content_hash = ? AND d.status != ?",
+                (content_hash, DocumentStatus.DELETED),
             ).fetchone()
         return None if row is None else str(row["id"])
 
@@ -1157,6 +1460,7 @@ class SnapshotRepository:
         for _ in range(PUBLICATION_ATTEMPTS):
             with self.database.transaction() as connection:
                 candidate = stage(connection)
+                self._stage_approved_assertions(connection, snapshot_id)
                 staged_state = _publication_state(connection, candidate.document_id)
                 rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
             try:
@@ -1183,6 +1487,26 @@ class SnapshotRepository:
             connection.execute(
                 "DELETE FROM snapshots WHERE id = ? AND status = 'candidate'", (str(snapshot_id),)
             )
+
+    @staticmethod
+    def _stage_approved_assertions(connection: sqlite3.Connection, snapshot_id: UUID) -> None:
+        """Only approved candidates whose complete evidence set belongs to this candidate
+        snapshot become visible. This runs in the same transaction as membership staging, so a
+        failed index validation rolls both back together."""
+        connection.execute(
+            """INSERT OR IGNORE INTO snapshot_assertions (snapshot_id, assertion_id)
+            SELECT ?, candidate.id
+            FROM assertion_candidates candidate
+            JOIN assertion_reviews review ON review.assertion_id = candidate.id
+              AND review.decision = 'approved'
+            WHERE NOT EXISTS (
+              SELECT 1 FROM assertion_evidence evidence
+              LEFT JOIN snapshot_membership membership
+                ON membership.snapshot_id = ? AND membership.fragment_id = evidence.fragment_id
+              WHERE evidence.assertion_id = candidate.id AND membership.fragment_id IS NULL
+            )""",
+            (str(snapshot_id), str(snapshot_id)),
+        )
 
     @staticmethod
     def _activate_candidate(

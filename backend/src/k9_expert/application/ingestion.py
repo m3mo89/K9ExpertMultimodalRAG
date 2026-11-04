@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from k9_expert.application.assertion_extraction import RuleAssertionExtractor, persist_candidates
 from k9_expert.application.indexing import EmbedFragments
 from k9_expert.application.observability import TraceRecorder
 from k9_expert.domain.breed_vocabulary import (
@@ -22,7 +23,12 @@ from k9_expert.infrastructure.extraction import (
     PdfExtractor,
     TextBlock,
 )
-from k9_expert.infrastructure.sqlite import ContentRepository, JobRepository, PrepareIndex
+from k9_expert.infrastructure.sqlite import (
+    ContentRepository,
+    JobRepository,
+    PrepareIndex,
+    StructuredKnowledgeRepository,
+)
 from k9_expert.infrastructure.structuring import (
     CHUNKING_VERSION,
     HeadingDetector,
@@ -57,6 +63,7 @@ class IngestionWorker:
         on_published: Callable[[str], None] | None = None,
         embedding_counter: Callable[[], tuple[int, int]] | None = None,
         index_stats: Callable[[], Mapping[str, int]] | None = None,
+        structured_knowledge: StructuredKnowledgeRepository | None = None,
     ) -> None:
         self.jobs = jobs
         self.content = content
@@ -72,6 +79,7 @@ class IngestionWorker:
         # (cache hits, model computations) so traces prove incremental embedding.
         self.embedding_counter = embedding_counter
         self.index_stats = index_stats
+        self.structured_knowledge = structured_knowledge
 
     def run_once(self) -> bool:
         lease = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
@@ -159,6 +167,18 @@ class IngestionWorker:
             texts = {chunk.content_hash: chunk.text for chunk in chunks}
             hashes = list(texts)
             fragment_ids = self.content.fragment_ids_by_hash(version_id, hashes)
+            if self.structured_knowledge is not None:
+                with trace.stage("assertion_candidates"):
+                    extractor = RuleAssertionExtractor()
+                    candidates = [
+                        candidate
+                        for chunk, classification in zip(chunks, classifications, strict=True)
+                        for candidate in extractor.extract(
+                            classification.breed, chunk.text, fragment_ids[chunk.content_hash]
+                        )
+                    ]
+                    count = persist_candidates(self.structured_knowledge, candidates)
+                    trace.set(assertion_candidates=count)
             counted = self.embedding_counter() if self.embedding_counter else (0, 0)
             self.jobs.update_stage(job_id, JobStage.EMBEDDING, "embedding")
             with trace.stage("embedding"):

@@ -1,0 +1,18 @@
+{
+  "version": "k9-recommendation-v1",
+  "review_provenance": "Pending independent specialist review; fixture contains no breed suitability claims.",
+  "cases": [
+    {
+      "id": "REC-INCOMPLETE-01",
+      "profile": {
+        "prey": ["venado"],
+        "terrain": ["monte_denso"],
+        "experience": ["principiante"]
+      },
+      "expected_abstention": true,
+      "expected_missing_fields": ["modality", "daily_availability"],
+      "specialist_judgments": [],
+      "evidence_labels": []
+    }
+  ]
+}

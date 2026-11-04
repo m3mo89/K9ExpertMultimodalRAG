@@ -79,6 +79,12 @@ max_candidates = 5
 # the criteria across the whole breed registry.
 discovery_pool = 20
 
+[recommendation]
+# Deterministic results remain available when local narrative generation is disabled.
+narrative_enabled = false
+# A local rollback can retain advanced BreedMatch while hiding v2 recommendation routes.
+api_enabled = true
+
 [retention]
 trace_days = 30
 deleted_source_days = 30

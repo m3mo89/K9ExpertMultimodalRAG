@@ -35,4 +35,16 @@ describe('ApiClient', () => {
     expect(adminInit.headers).toMatchObject({ 'X-K9-Admin-Secret': 's3cret', 'X-K9-Actor': 'ana' })
     expect(publicInit.headers).not.toHaveProperty('X-K9-Admin-Secret')
   })
+
+  it('uses versioned immutable recommendation-context routes', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      id: 'ctx', recommendation_id: 'rec', selected_breeds: ['Raza'], allowed_evidence: ['f1'], created_at: 't',
+    }), { status: 201 }))
+    const client = new ApiClient(fetchImpl as typeof fetch)
+    await client.createRecommendationContext('rec', ['Raza'])
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/v2/recommendations/rec/chat-context',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ selected_breeds: ['Raza'] }) }),
+    )
+  })
 })

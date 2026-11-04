@@ -41,9 +41,16 @@ from k9_expert.application.query import (
     SemanticRetriever,
 )
 from k9_expert.application.query_service import QueryService
+from k9_expert.application.recommendation import (
+    DeterministicRecommendationEngine,
+    HunterRecommendationService,
+    recommendation_narrator,
+)
+from k9_expert.application.recommendation_context import RecommendationContextService
 from k9_expert.application.recovery import BackupService, IndexMaintainer, RestoreService
 from k9_expert.application.response_cache import AnalysisResponseCache, QueryResponseCache
 from k9_expert.application.routing import ComplexityRouter
+from k9_expert.application.structured_knowledge import StructuredBreedProfileService
 from k9_expert.infrastructure.breed_images import PdfBreedImages
 from k9_expert.infrastructure.embeddings import (
     CachingEmbedder,
@@ -60,10 +67,13 @@ from k9_expert.infrastructure.sqlite import (
     DocumentRepository,
     InteractionRepository,
     JobRepository,
+    RecommendationContextRepository,
+    RecommendationRepository,
     SecurityRepository,
     SnapshotRepository,
     SqliteDatabase,
     SqliteResponseCache,
+    StructuredKnowledgeRepository,
     SystemStateRepository,
     TraceRepository,
 )
@@ -113,6 +123,8 @@ class ApplicationSettings:
     breed_match_minimum_coverage: float = 0.5
     breed_match_max_candidates: int = 5
     breed_match_discovery_pool: int = 20
+    recommendation_narrative_enabled: bool = False
+    recommendation_api_enabled: bool = True
 
     @property
     def files_dir(self) -> Path:
@@ -146,6 +158,10 @@ class ApplicationContainer:
     breed_analysis_service: BreedAnalysisService
     breed_profile_service: BreedProfileService
     breed_registry: BreedRegistry
+    structured_knowledge: StructuredKnowledgeRepository
+    structured_breed_profiles: StructuredBreedProfileService
+    recommendation_service: HunterRecommendationService
+    recommendation_context_service: RecommendationContextService
 
 
 # TOML key -> settings field. The admin secret is deliberately not read from files.
@@ -185,6 +201,8 @@ _TOML_FIELDS = {
     ("breed_match", "minimum_coverage"): "breed_match_minimum_coverage",
     ("breed_match", "max_candidates"): "breed_match_max_candidates",
     ("breed_match", "discovery_pool"): "breed_match_discovery_pool",
+    ("recommendation", "narrative_enabled"): "recommendation_narrative_enabled",
+    ("recommendation", "api_enabled"): "recommendation_api_enabled",
 }
 
 
@@ -219,6 +237,8 @@ def compose(
     documents = DocumentRepository(database)
     jobs = JobRepository(database)
     snapshots = SnapshotRepository(database)
+    structured_knowledge = StructuredKnowledgeRepository(database)
+    recommendation_contexts = RecommendationContextRepository(database)
     state = SystemStateRepository(database)
     service = DocumentRegistrationService(
         file_store,
@@ -367,6 +387,18 @@ def compose(
         resolved.embedding_model,
     ))))
     breed_registry = BreedRegistry(documents, snapshots)
+    recommendation_service = HunterRecommendationService(
+        documents,
+        structured_knowledge,
+        RecommendationRepository(database),
+        DeterministicRecommendationEngine(),
+        breed_registry.names,
+        sink=traces,
+        narrator=(
+            recommendation_narrator(routed_gateway.generate)
+            if resolved.recommendation_narrative_enabled else None
+        ),
+    )
     breed_analysis_service = BreedAnalysisService(
         documents,
         retriever,
@@ -432,6 +464,7 @@ def compose(
             jobs,
             ContentRepository(database),
             sink=traces,
+            structured_knowledge=structured_knowledge,
             embedding_config={
                 "alias": ollama_embedder.alias,
                 "model": resolved.embedding_model,
@@ -460,6 +493,12 @@ def compose(
             breed_registry,
         ),
         breed_registry=breed_registry,
+        structured_knowledge=structured_knowledge,
+        structured_breed_profiles=StructuredBreedProfileService(structured_knowledge),
+        recommendation_service=recommendation_service,
+        recommendation_context_service=RecommendationContextService(
+            RecommendationRepository(database), recommendation_contexts
+        ),
     )
 
 

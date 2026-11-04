@@ -377,3 +377,101 @@ export interface BreedProfile {
   photo_caption: string | null
   photo_page: number | null
 }
+
+export type ProfileImportance = 'preference' | 'required'
+
+export interface HunterProfileAnswer {
+  key: string
+  values: string[]
+  importance?: ProfileImportance
+}
+
+export interface HunterProfileRequest {
+  schema_version?: '2.0'
+  answers: HunterProfileAnswer[]
+  candidate_breeds?: string[]
+}
+
+export interface ProfileDimension {
+  key: string
+  values: string[]
+  weight: number
+  required: boolean
+}
+
+export interface HunterProfileValidation {
+  schema_version: string
+  translator_version: string
+  completeness: 'complete' | 'incomplete'
+  missing_fields: string[]
+  dimensions: ProfileDimension[]
+  constraints: string[]
+}
+
+export interface RecommendationDimensionResult {
+  key: string
+  compatibility: number | null
+  documented: boolean
+  conflicting: boolean
+  evidence_ids: string[]
+}
+
+export interface HunterRecommendationCandidate {
+  breed: string
+  band: 'high' | 'moderate' | 'low' | null
+  compatibility: number | null
+  coverage: number
+  penalties: string[]
+  excluded: boolean
+  dimensions: RecommendationDimensionResult[]
+}
+
+export interface HunterRecommendation {
+  schema_version: string
+  recommendation_id: string
+  status: 'completed' | 'incomplete' | 'abstained'
+  policy_version: string
+  snapshot_id: string | null
+  candidates: HunterRecommendationCandidate[]
+  limitations: string[]
+  trace_id: string | null
+  summary: string | null
+}
+
+export interface StructuredAssertionEvidence {
+  fragment_id: string
+  title: string
+  physical_page: number
+}
+
+export interface StructuredBreedProfile {
+  breed: string
+  snapshot_id: string
+  policy_version: string
+  attributes: Array<{
+    key: string
+    evidence_state: 'documented' | 'conflicting' | 'unknown'
+    assertions: Array<{
+      id: string
+      value: string
+      polarity: 'supports' | 'contradicts'
+      evidence: StructuredAssertionEvidence[]
+    }>
+  }>
+}
+
+export interface RecommendationChatContext {
+  id: string
+  recommendation_id: string
+  selected_breeds: string[]
+  allowed_evidence: string[]
+  created_at: string
+}
+
+export interface RecommendationContextAnswer {
+  status: 'grounded' | 'new_recommendation_required'
+  answer: string
+  bibliographic_evidence: string[]
+  policy_inference: Array<{ breed: string; band: string | null; coverage: number; penalties: string[] }>
+  generated_explanation: string | null
+}

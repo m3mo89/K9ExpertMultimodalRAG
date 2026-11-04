@@ -81,6 +81,51 @@ def test_v3_migration_is_additive_and_preserves_existing_rows(tmp_path: Path) ->
     assert "CREATE TABLE" in BREED_MATCH_TABLES
 
 
+def test_v7_upgrade_backs_up_preserves_v1_data_and_rollback_restores_old_schema(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "k9.sqlite"
+    database = SqliteDatabase(path)
+    database.migrate()
+    document_id = str(uuid4())
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO documents VALUES (?, 'Legacy', NULL, NULL, 'active', NULL, 'a', 'b')",
+            (document_id,),
+        )
+        for table in (
+            "recommendation_chat_contexts", "recommendations", "snapshot_assertions",
+            "assertion_reviews", "assertion_evidence", "assertion_candidates",
+        ):
+            connection.execute(f"DROP TABLE {table}")
+        connection.execute("PRAGMA user_version = 7")
+
+    database.migrate()
+
+    [backup] = (tmp_path / "migration-backups").iterdir()
+    with database.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert connection.execute("SELECT COUNT(*) FROM assertion_candidates").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT title FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()["title"] == "Legacy"
+    # The previous binary refuses the upgraded file but accepts the untouched v7 copy.
+    old_binary_version = 7
+    restored = SqliteDatabase(backup)
+    with restored.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == old_binary_version
+        assert connection.execute(
+            "SELECT title FROM documents WHERE id = ?", (document_id,)
+        ).fetchone()["title"] == "Legacy"
+        tables = {
+            row["name"]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+    assert "assertion_candidates" not in tables
+    database.migrate()
+    assert len(list((tmp_path / "migration-backups").iterdir())) == 1
+
+
 def test_managed_file_store_uses_content_hash_and_atomic_destination(tmp_path: Path) -> None:
     source = tmp_path / "source.pdf"
     source.write_bytes(b"%PDF-1.7 sample")

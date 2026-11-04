@@ -907,6 +907,35 @@ details > summary {
   border: 0;
 }
 
+.guided-card progress {
+  width: 100%;
+}
+
+.guided-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.guided-option details {
+  margin-top: 0.35rem;
+}
+
+.advanced-analysis {
+  margin-top: 1.5rem;
+}
+
+.recommendation-card {
+  border-top: 1px solid var(--border);
+  padding-block: 1rem;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;

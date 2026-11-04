@@ -27,6 +27,7 @@ from k9_expert.application.documents import (
     DuplicateDocumentError,
     UploadValidationError,
 )
+from k9_expert.application.profile_translation import HunterProfileTranslator
 from k9_expert.application.query_service import SubmitQuery
 from k9_expert.application.recovery import BackupError
 from k9_expert.domain.models import (
@@ -34,7 +35,11 @@ from k9_expert.domain.models import (
     BreedAnalysisReport,
     BreedCriterion,
     DocumentId,
+    HunterProfile,
+    HunterProfileAnswer,
+    ProfileImportance,
     QueryFilters,
+    ReviewDecision,
 )
 
 
@@ -161,6 +166,64 @@ class BreedAnalysisRequest(BaseModel):
     criteria: list[BreedCriterionRequest] = Field(min_length=1, max_length=12)
     candidate_breeds: list[str] = Field(default_factory=list, max_length=12)
     document_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class HunterProfileAnswerRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    values: list[str] = Field(min_length=1, max_length=12)
+    importance: ProfileImportance = ProfileImportance.PREFERENCE
+
+
+class HunterProfileRequest(BaseModel):
+    schema_version: str = Field(default="2.0", pattern=r"^2(?:\.\d+)?$")
+    answers: list[HunterProfileAnswerRequest] = Field(min_length=1, max_length=20)
+    candidate_breeds: list[str] = Field(default_factory=list, max_length=12)
+
+
+class RecommendationDimensionResponse(BaseModel):
+    key: str
+    values: list[str]
+    weight: float
+    required: bool
+
+
+class HunterProfileValidationResponse(BaseModel):
+    schema_version: str = "2.0"
+    translator_version: str
+    completeness: str
+    missing_fields: list[str]
+    dimensions: list[RecommendationDimensionResponse]
+    constraints: list[str]
+
+
+class RecommendationCandidateResponse(BaseModel):
+    breed: str
+    band: str | None
+    compatibility: float | None
+    coverage: float
+    penalties: list[str] = Field(default_factory=list)
+    excluded: bool = False
+    dimensions: list[dict[str, object]] = Field(default_factory=list)
+
+
+class HunterRecommendationResponse(BaseModel):
+    schema_version: str = "2.0"
+    recommendation_id: str
+    status: str
+    policy_version: str
+    snapshot_id: str | None
+    candidates: list[RecommendationCandidateResponse] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    trace_id: str | None = None
+    summary: str | None = None
+
+
+class RecommendationContextRequest(BaseModel):
+    selected_breeds: list[str] = Field(min_length=1, max_length=3)
+
+
+class RecommendationContextQueryRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
 
 
 class AnalysisCitationResponse(BaseModel):
@@ -293,6 +356,12 @@ class RestoreRequest(BaseModel):
     confirmation_token: str = Field(min_length=1)
 
 
+class AssertionReviewRequest(BaseModel):
+    decision: ReviewDecision
+    snapshot_id: UUID | None = None
+    comment: str | None = Field(default=None, max_length=1000)
+
+
 def error_response(status_code: int, code: str, details: object | None = None) -> JSONResponse:
     payload = ErrorEnvelope(
         code=code,
@@ -411,6 +480,36 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             x_k9_actor, request.resource_id, request.operation, request.resource_version
         )
         return ConfirmationResponse(token=token, expires_at=expires_at)
+
+    @app.get("/api/v2/admin/assertions", dependencies=[Depends(require_admin)])
+    def list_assertion_candidates(state: str | None = None) -> list[dict[str, object]]:
+        return resolved.structured_knowledge.candidates(state)
+
+    @app.post(
+        "/api/v2/admin/assertions/{assertion_id}/review",
+        dependencies=[Depends(require_admin)],
+    )
+    def review_assertion(
+        assertion_id: str,
+        request: AssertionReviewRequest,
+        x_k9_actor: Annotated[str, Header(min_length=1, max_length=100)] = "local-admin",
+    ) -> dict[str, str]:
+        try:
+            resolved.structured_knowledge.review(
+                assertion_id,
+                x_k9_actor,
+                request.decision,
+                str(request.snapshot_id) if request.snapshot_id else None,
+                request.comment,
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        resolved.admin_security.record(
+            x_k9_actor, f"assertion_{request.decision}", assertion_id
+        )
+        return {"assertion_id": assertion_id, "decision": str(request.decision)}
 
     @app.post(
         "/api/v1/documents/{document_id}/deactivate",
@@ -663,6 +762,123 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
         )
         return breed_analysis_response(resolved.breed_analysis_service.analyze(profile))
 
+    @app.post(
+        "/api/v2/hunter-profiles/validate", response_model=HunterProfileValidationResponse
+    )
+    def validate_hunter_profile(request: HunterProfileRequest) -> HunterProfileValidationResponse:
+        if not resolved.settings.recommendation_api_enabled:
+            raise HTTPException(status_code=404, detail="recommendation_api_disabled")
+        try:
+            translated = HunterProfileTranslator().translate(HunterProfile(
+                answers=tuple(
+                    HunterProfileAnswer(
+                        key=answer.key,
+                        values=tuple(answer.values),
+                        importance=answer.importance,
+                    )
+                    for answer in request.answers
+                ),
+                candidate_breeds=tuple(request.candidate_breeds),
+                schema_version=request.schema_version,
+            ))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return HunterProfileValidationResponse(
+            translator_version=translated.translator_version,
+            completeness=str(translated.completeness),
+            missing_fields=list(translated.missing_fields),
+            dimensions=[
+                RecommendationDimensionResponse(
+                    key=item.key, values=list(item.values), weight=item.weight,
+                    required=item.required,
+                )
+                for item in translated.dimensions
+            ],
+            constraints=[item.dimension for item in translated.constraints],
+        )
+
+    @app.post(
+        "/api/v2/recommendations", response_model=HunterRecommendationResponse, status_code=201
+    )
+    def create_hunter_recommendation(
+        request: HunterProfileRequest,
+    ) -> HunterRecommendationResponse:
+        if not resolved.settings.recommendation_api_enabled:
+            raise HTTPException(status_code=404, detail="recommendation_api_disabled")
+        try:
+            translated = HunterProfileTranslator().translate(HunterProfile(
+                answers=tuple(
+                    HunterProfileAnswer(
+                        answer.key, tuple(answer.values), answer.importance
+                    )
+                    for answer in request.answers
+                ),
+                candidate_breeds=tuple(request.candidate_breeds),
+                schema_version=request.schema_version,
+            ))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        result = resolved.recommendation_service.recommend(translated)
+        return HunterRecommendationResponse(
+            recommendation_id=str(result.recommendation_id),
+            status=(
+                "completed" if result.candidates
+                else "incomplete" if translated.missing_fields else "abstained"
+            ),
+            policy_version=result.policy_version,
+            snapshot_id=str(result.snapshot_id) if result.snapshot_id else None,
+            candidates=[
+                RecommendationCandidateResponse(
+                    breed=item.breed,
+                    band=str(item.band) if item.band else None,
+                    compatibility=item.compatibility,
+                    coverage=item.coverage,
+                    penalties=list(item.penalties),
+                    excluded=item.excluded,
+                    dimensions=[
+                        {
+                            "key": dimension.key,
+                            "compatibility": dimension.compatibility,
+                            "documented": dimension.documented,
+                            "conflicting": dimension.conflicting,
+                            "evidence_ids": [
+                                str(evidence_id) for evidence_id in dimension.evidence_ids
+                            ],
+                        }
+                        for dimension in item.dimensions
+                    ],
+                )
+                for item in result.candidates
+            ],
+            limitations=list(result.limitations),
+            trace_id=result.trace_id,
+            summary=result.summary,
+        )
+
+    @app.post("/api/v2/recommendations/{recommendation_id}/chat-context", status_code=201)
+    def create_recommendation_context(
+        recommendation_id: str, request: RecommendationContextRequest
+    ) -> dict[str, object]:
+        try:
+            return resolved.recommendation_context_service.create(
+                recommendation_id, request.selected_breeds
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post("/api/v2/recommendation-contexts/{context_id}/queries")
+    def query_recommendation_context(
+        context_id: str, request: RecommendationContextQueryRequest
+    ) -> dict[str, object]:
+        try:
+            return resolved.recommendation_context_service.answer(context_id, request.text)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error.args[0])) from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
     @app.get("/api/v1/breeds", response_model=list[BreedListItem])
     def list_breeds() -> list[BreedListItem]:
         return [
@@ -694,6 +910,38 @@ def create_app(container: ApplicationContainer | None = None) -> FastAPI:
             ),
             photo_caption=profile.photo_caption, photo_page=profile.photo_page,
         )
+
+    @app.get("/api/v2/breeds/{breed}/structured-profile")
+    def get_structured_breed_profile(breed: str, snapshot_id: UUID) -> dict[str, object]:
+        profile = resolved.structured_breed_profiles.profile(str(snapshot_id), breed)
+        return {
+            "breed": profile.breed,
+            "snapshot_id": str(profile.snapshot_id),
+            "policy_version": profile.policy_version,
+            "attributes": [
+                {
+                    "key": attribute.key,
+                    "evidence_state": attribute.evidence_state,
+                    "assertions": [
+                        {
+                            "id": str(assertion.assertion_id),
+                            "value": assertion.value,
+                            "polarity": str(assertion.polarity),
+                            "evidence": [
+                                {
+                                    "fragment_id": str(item.fragment_id),
+                                    "title": item.source.title,
+                                    "physical_page": item.source.physical_page,
+                                }
+                                for item in assertion.evidence
+                            ],
+                        }
+                        for assertion in attribute.assertions
+                    ],
+                }
+                for attribute in profile.attributes
+            ],
+        }
 
     @app.get("/api/v1/breeds/{breed}/photo", response_class=Response)
     def get_breed_photo(breed: str) -> Response:

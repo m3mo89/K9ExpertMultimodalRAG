@@ -16,6 +16,7 @@ QueryId = NewType("QueryId", UUID)
 ConversationId = NewType("ConversationId", UUID)
 JobId = NewType("JobId", UUID)
 BreedAnalysisId = NewType("BreedAnalysisId", UUID)
+RecommendationId = NewType("RecommendationId", UUID)
 
 
 class DocumentStatus(StrEnum):
@@ -60,6 +61,43 @@ class FindingOutcome(StrEnum):
     MATCH = "match"
     MISMATCH = "mismatch"
     NOT_DOCUMENTED = "not_documented"
+
+
+class ProfileImportance(StrEnum):
+    PREFERENCE = "preference"
+    REQUIRED = "required"
+
+
+class ProfileCompleteness(StrEnum):
+    COMPLETE = "complete"
+    INCOMPLETE = "incomplete"
+
+
+class RecommendationBand(StrEnum):
+    HIGH = "high"
+    MODERATE = "moderate"
+    LOW = "low"
+
+
+class AssertionPolarity(StrEnum):
+    SUPPORTS = "supports"
+    CONTRADICTS = "contradicts"
+
+
+class AssertionEvidenceState(StrEnum):
+    DOCUMENTED = "documented"
+    CONFLICTING = "conflicting"
+
+
+class AssertionExtractionState(StrEnum):
+    CANDIDATE = "candidate"
+    QUARANTINED = "quarantined"
+    REVIEWED = "reviewed"
+
+
+class ReviewDecision(StrEnum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class GuardrailAction(StrEnum):
@@ -115,6 +153,138 @@ class QueryCommand:
 class Citation:
     evidence_id: FragmentId
     source: SourceRef
+
+
+@dataclass(frozen=True, slots=True)
+class HunterProfileAnswer:
+    """Original user answer retained independently from normalized policy dimensions."""
+
+    key: str
+    values: tuple[str, ...]
+    importance: ProfileImportance = ProfileImportance.PREFERENCE
+
+    def __post_init__(self) -> None:
+        if (
+            not self.key.strip()
+            or not self.values
+            or any(not value.strip() for value in self.values)
+        ):
+            raise ValueError("profile_answer_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class HunterProfile:
+    answers: tuple[HunterProfileAnswer, ...]
+    candidate_breeds: tuple[str, ...] = ()
+    schema_version: str = "2.0"
+
+    def __post_init__(self) -> None:
+        keys = [answer.key for answer in self.answers]
+        if len(keys) != len(set(keys)):
+            raise ValueError("profile_answer_duplicate")
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendationDimension:
+    key: str
+    values: tuple[str, ...]
+    weight: float
+    required: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.key or not self.values or self.weight <= 0:
+            raise ValueError("recommendation_dimension_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileConstraint:
+    dimension: str
+    values: tuple[str, ...]
+    operator: str = "supports_any"
+
+
+@dataclass(frozen=True, slots=True)
+class TranslatedHunterProfile:
+    original: HunterProfile
+    dimensions: tuple[RecommendationDimension, ...]
+    constraints: tuple[ProfileConstraint, ...]
+    completeness: ProfileCompleteness
+    missing_fields: tuple[str, ...] = ()
+    translator_version: str = "hunter-profile-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendationDimensionResult:
+    key: str
+    compatibility: float | None
+    documented: bool
+    conflicting: bool = False
+    evidence_ids: tuple[FragmentId, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendationCandidate:
+    breed: str
+    band: RecommendationBand | None
+    compatibility: float | None
+    coverage: float
+    dimensions: tuple[RecommendationDimensionResult, ...]
+    penalties: tuple[str, ...] = ()
+    excluded: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendationResult:
+    recommendation_id: RecommendationId
+    profile: TranslatedHunterProfile
+    policy_version: str
+    snapshot_id: SnapshotId | None
+    candidates: tuple[RecommendationCandidate, ...] = ()
+    limitations: tuple[str, ...] = ()
+    trace_id: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BreedAssertionEvidence:
+    fragment_id: FragmentId
+    source: SourceRef
+
+
+@dataclass(frozen=True, slots=True)
+class BreedAssertion:
+    assertion_id: UUID
+    breed: str
+    attribute_key: str
+    value: str
+    polarity: AssertionPolarity
+    evidence_state: AssertionEvidenceState
+    extraction_state: AssertionExtractionState
+    extraction_method: str
+    policy_version: str
+    evidence: tuple[BreedAssertionEvidence, ...]
+    review_decision: ReviewDecision | None = None
+
+    def __post_init__(self) -> None:
+        if not all((self.breed.strip(), self.attribute_key.strip(), self.value.strip())):
+            raise ValueError("assertion_field_invalid")
+        if not self.evidence:
+            raise ValueError("assertion_evidence_required")
+
+
+@dataclass(frozen=True, slots=True)
+class BreedAttributeProfile:
+    key: str
+    assertions: tuple[BreedAssertion, ...]
+    evidence_state: str
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredBreedProfile:
+    breed: str
+    snapshot_id: SnapshotId
+    attributes: tuple[BreedAttributeProfile, ...]
+    policy_version: str
 
 
 @dataclass(frozen=True, slots=True)

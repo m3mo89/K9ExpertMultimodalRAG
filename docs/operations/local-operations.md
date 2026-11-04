@@ -91,6 +91,25 @@ Para inspeccionar:
 - `GET /api/v1/admin/metrics`: estados, abstención, latencia p50/p95, caché, rendimiento de ingesta y disponibilidad de modelos.
 - `GET /api/v1/admin/health`: API, trabajador, SQLite, almacenamiento, snapshot, índice y modelos.
 
+### Revisión de afirmaciones estructuradas (recomendación v2)
+
+La ingesta crea afirmaciones **candidatas** (raza, atributo, valor, polaridad y fragmento). Ninguna
+entra en la recomendación hasta que un revisor la aprueba:
+
+```bash
+# Candidatas pendientes y su evidencia (fragment_ids)
+curl -s -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" "http://127.0.0.1:8000/api/v2/admin/assertions?state=candidate"
+# Aprobar contra el snapshot activo (o "rejected"); X-K9-Actor identifica al revisor en la auditoría
+curl -s -X POST -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" -H "X-K9-Actor: revisor-1" \
+  -H 'Content-Type: application/json' http://127.0.0.1:8000/api/v2/admin/assertions/<id>/review \
+  -d '{"decision": "approved", "snapshot_id": "<snapshot_activo>", "comment": "pág. 57 lo afirma"}'
+```
+
+Antes de aprobar, abra la página citada y confirme que el texto afirma ese atributo para esa raza
+(el extractor por reglas detecta palabras, no comprende negaciones complejas ni el verbo «muestra»).
+Una aprobación sin `snapshot_id` se rechaza con `409 snapshot_required`. Si dos afirmaciones aprobadas
+se contradicen, el perfil marca el atributo como `conflicting` y ambas posiciones quedan visibles.
+
 Para volver a un snapshot retenido, usa `POST /api/v1/admin/snapshots/{id}/rollback`. Se rechaza si su generación vectorial está incompleta o si contiene una fuente eliminada.
 
 ### Primera publicación con puertas de evaluación
@@ -155,3 +174,22 @@ make web-check web-test web-e2e          # frontend: lint, build, unidad y naveg
 - **Coincidencia de BreedMatch.** Es por subcadena normalizada con detección simple de negación; un término ambiguo («muestra» también es verbo) puede producir coincidencias falsas. El informe muestra la cita para que el usuario la verifique.
 - **Sin modelo de usuarios.** Un único secreto administrativo; las consultas son abiertas dentro de la red.
 - **Contenido histórico.** Las respuestas son documentales e históricas; no sustituyen consejo veterinario actual.
+## 12. Rollback del recomendador guiado
+
+Para volver temporalmente al análisis documental avanzado sin perder perfiles, afirmaciones ni
+resultados v2, establezca `recommendation.api_enabled = false` en la configuración local y ejecute
+la web con `VITE_K9_GUIDED_RECOMMENDATION=false`. El binario actual sigue leyendo la base v10 y los
+snapshots/documentos existentes no se reescriben.
+
+### Migración y vuelta al binario anterior
+
+- Las migraciones son aditivas y ordenadas (`PRAGMA user_version`). Antes de actualizar una base
+  existente, `migrate()` copia la base a `data/migration-backups/k9-v<versión>-<fecha>.sqlite`.
+- Verificación: tras arrancar, `PRAGMA user_version` es 10 y las tablas v1 conservan sus filas
+  (cubierto por `test_v7_upgrade_backs_up_preserves_v1_data_and_rollback_restores_old_schema`).
+- El binario anterior **rechaza** una base con esquema más nuevo (`UnsupportedSchemaError`), así que
+  no puede ejecutarse sobre la base actualizada. Para volver a él: detenga API y trabajador, copie
+  la copia previa sobre `data/k9.sqlite` y arranque el binario anterior. Los registros v2 creados
+  después de la migración se pierden con esa restauración.
+- Antes del lanzamiento también es válido borrar `data/k9.sqlite` y reingerir los PDF; la caché de
+  embeddings por hash de contenido hace barata la reingesta.

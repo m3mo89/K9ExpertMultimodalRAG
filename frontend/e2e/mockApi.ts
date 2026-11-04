@@ -103,12 +103,51 @@ const routes: Record<string, unknown> = {
   },
 }
 
+const v2Routes: Record<string, unknown> = {
+  'POST /hunter-profiles/validate': {
+    schema_version: '2.0', translator_version: 'hunter-profile-v1', completeness: 'complete',
+    missing_fields: [], constraints: [], dimensions: [
+      { key: 'prey', values: ['venado'], weight: 0.3, required: true },
+      { key: 'modality', values: ['rastreo'], weight: 0.3, required: true },
+      { key: 'terrain', values: ['monte_denso'], weight: 0.25, required: true },
+      { key: 'experience', values: ['principiante'], weight: 0.2, required: true },
+      { key: 'daily_availability', values: ['1_2h'], weight: 0.15, required: true },
+    ],
+  },
+  'POST /recommendations': {
+    schema_version: '2.0', recommendation_id: 'r-1', status: 'completed', policy_version: 'v2',
+    snapshot_id: 'snap-1', trace_id: 'trace-r', summary: null,
+    limitations: ['fewer_supported_candidates'], candidates: [
+      { breed: 'Teckel alemán', band: 'high', compatibility: 1, coverage: 0.7, penalties: [], excluded: false,
+        dimensions: [{ key: 'modality', compatibility: 1, documented: true, conflicting: false, evidence_ids: ['frag-1'] }] },
+      { breed: 'Basset hound', band: 'moderate', compatibility: 0.6, coverage: 0.6, penalties: [], excluded: false,
+        dimensions: [{ key: 'modality', compatibility: null, documented: true, conflicting: true, evidence_ids: ['frag-2'] }] },
+    ],
+  },
+  'GET /breeds/Teckel%20alem%C3%A1n/structured-profile': {
+    breed: 'Teckel alemán', snapshot_id: 'snap-1', policy_version: 'v1', attributes: [],
+  },
+  'GET /breeds/Basset%20hound/structured-profile': {
+    breed: 'Basset hound', snapshot_id: 'snap-1', policy_version: 'v1', attributes: [],
+  },
+}
+
 /** Serves the application API from fixtures so browser tests need no backend or models. */
 export async function mockApi(page: Page) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const url = new URL(route.request().url())
     const key = `${route.request().method()} ${url.pathname.replace('/api/v1', '')}`
     const body = routes[key]
+    if (body === undefined) {
+      await route.fulfill({ status: 404, json: { code: 'not_mocked', message: key, details: null, trace_id: 't', retryable: false } })
+      return
+    }
+    await route.fulfill({ status: 200, json: body })
+  })
+  await page.route('**/api/v2/**', async (route: Route) => {
+    const url = new URL(route.request().url())
+    const key = `${route.request().method()} ${url.pathname.replace('/api/v2', '')}`
+    const body = v2Routes[key]
     if (body === undefined) {
       await route.fulfill({ status: 404, json: { code: 'not_mocked', message: key, details: null, trace_id: 't', retryable: false } })
       return

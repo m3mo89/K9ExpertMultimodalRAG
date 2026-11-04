@@ -21,6 +21,7 @@ import {
 } from '../../labels'
 import { FeedbackControls } from '../chat/FeedbackControls'
 import { BreedProfileDialog } from './BreedProfileDialog'
+import { GuidedBreedMatch } from './GuidedBreedMatch'
 
 export const MAX_CRITERIA = 12
 
@@ -72,6 +73,20 @@ function matchedWeight(candidate: BreedCandidate, criteria: BreedCriterion[]): n
 }
 
 export function BreedMatchView() {
+  const guidedEnabled = import.meta.env.VITE_K9_GUIDED_RECOMMENDATION !== 'false'
+  if (!guidedEnabled) return <AdvancedBreedMatchView />
+  return (
+    <section className="page breedmatch">
+      <GuidedBreedMatch />
+      <details className="advanced-analysis" open>
+        <summary>Análisis documental avanzado</summary>
+        <AdvancedBreedMatchView />
+      </details>
+    </section>
+  )
+}
+
+export function AdvancedBreedMatchView() {
   const api = useApi()
   const breedsId = useId()
   const breedListId = useId()
@@ -128,9 +143,9 @@ export function BreedMatchView() {
   }
 
   return (
-    <section className="page breedmatch" aria-labelledby="breedmatch-heading">
+    <section aria-labelledby="breedmatch-heading">
       <header className="page-header">
-        <h1 id="breedmatch-heading">Análisis de razas</h1>
+        <h2 id="breedmatch-heading">Análisis documental avanzado</h2>
         <p className="muted">
           Elija lo que necesita de su perro de caza. K9 BreedMatch busca en la biblioteca las
           razas que lo documentan y explica cada coincidencia con su página.
