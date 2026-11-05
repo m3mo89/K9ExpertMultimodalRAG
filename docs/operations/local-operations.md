@@ -57,12 +57,61 @@ Se usan tres procesos, cada uno en su terminal:
 
 ```bash
 export K9_ADMIN_SECRET='…'          # elige un secreto largo
+export K9_DATA_DIR="$PWD/data"      # una sola raíz absoluta para API y worker
 make serve                          # API en 127.0.0.1:8000
 make worker                         # trabajador de ingesta (concurrencia 1)
 npm --prefix frontend run dev       # interfaz en http://127.0.0.1:5173
 ```
 
 `make api` arranca la API con recarga automática, para desarrollo.
+
+`make serve` y `make worker` exportan por defecto la misma raíz persistente
+`<repositorio>/data`. Una asignación como `K9_DATA_DIR=/tmp/k9-prueba` sólo afecta al
+proceso iniciado con ella; si se usa, debe repetirse en ambos comandos. Las raíces bajo
+`/tmp` son desechables y macOS puede eliminarlas. El frontend nunca abre SQLite: reenvía
+`/api` al proceso API del puerto 8000 y muestra exactamente el almacén de esa API.
+
+Al iniciar, API y worker imprimen una línea `K9_RUNTIME` con rol, ruta canónica, `store_id`
+y si la raíz es temporal. En **Sistema → Componentes**, con sesión administrativa, se muestran
+la misma identidad y el estado de alineación del worker (`aligned`, `missing` o `stale`).
+
+### Vista previa y reinicio integral del almacén
+
+Detén API y worker antes de reiniciar un almacén. La vista previa es de sólo lectura:
+
+```bash
+make store-preview
+# o: K9_DATA_DIR=/tmp/k9-prueba make store-preview
+```
+
+La salida inventaría SQLite, PDF administrados, índices, cachés y backups. Para ejecutar,
+copia exactamente el `store_id` mostrado:
+
+```bash
+make store-reset STORE_ID='<store_id>'
+```
+
+El comando rechaza rutas amplias, identidades distintas y procesos vivos. Mueve el contenido
+activo a `.k9-quarantine/`, crea una base vacía con una identidad nueva y conserva `backups/`
+por defecto. La eliminación de backups requiere ejecutar explícitamente
+`python -m k9_expert.store_admin` con `--remove-backups` y
+`--confirm-backup-removal`.
+
+### Recuperar una divergencia entre `data` y `/tmp`
+
+No mezcles automáticamente dos almacenes: sus snapshots, trabajos e índices forman unidades
+consistentes independientes.
+
+1. Detén API y worker.
+2. Ejecuta una vista previa para cada raíz y anota ruta, `store_id`, documentos y snapshots.
+3. Conserva una copia o deja la raíz descartada intacta hasta validar la elegida.
+4. Elige una sola raíz canónica. Para desarrollo normal se recomienda `$PWD/data`; usa `/tmp`
+   sólo para ensayos descartables.
+5. Si necesitas empezar vacío, ejecuta el reset protegido únicamente sobre la raíz elegida.
+6. Arranca API y worker con el mismo `K9_DATA_DIR` y confirma en Sistema que el worker figura
+   como alineado.
+7. Ejecuta `scripts/preflight.py`; si ya hay una API alcanzable y `K9_ADMIN_SECRET` está
+   definido, comparará su identidad con la raíz esperada.
 
 ### Acceso desde el móvil en la LAN
 
@@ -91,24 +140,38 @@ Para inspeccionar:
 - `GET /api/v1/admin/metrics`: estados, abstención, latencia p50/p95, caché, rendimiento de ingesta y disponibilidad de modelos.
 - `GET /api/v1/admin/health`: API, trabajador, SQLite, almacenamiento, snapshot, índice y modelos.
 
-### Revisión de afirmaciones estructuradas (recomendación v2)
+### Afirmaciones estructuradas (recomendación v2)
 
-La ingesta crea afirmaciones **candidatas** (raza, atributo, valor, polaridad y fragmento). Ninguna
-entra en la recomendación hasta que un revisor la aprueba:
+La ingesta extrae con reglas deterministas afirmaciones de presa, trabajo y terreno (raza, atributo,
+valor, polaridad y fragmento). Las que superan la validación de vocabulario y evidencia quedan en
+estado `auto_validated` y se publican con el snapshot, **sin revisión humana**. Las reglas sólo
+entienden español: subir otro idioma aporta casi nada y puede publicar nombres de raza incorrectos.
+
+Tras cambiar las reglas o el vocabulario hay que reingerir, porque las afirmaciones se generan en la
+ingesta. Detenga API y trabajador, ejecute `make store-preview` y `make store-reset STORE_ID=<id>` con
+el mismo `K9_DATA_DIR`, arranque de nuevo y suba el PDF.
+
+**Vetar una afirmación errónea** (opcional). Deja de usarse en recomendaciones nuevas y en snapshots
+posteriores; los resultados guardados no se reescriben:
 
 ```bash
-# Candidatas pendientes y su evidencia (fragment_ids)
-curl -s -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" "http://127.0.0.1:8000/api/v2/admin/assertions?state=candidate"
-# Aprobar contra el snapshot activo (o "rejected"); X-K9-Actor identifica al revisor en la auditoría
-curl -s -X POST -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" -H "X-K9-Actor: revisor-1" \
+curl -s -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" "http://127.0.0.1:8000/api/v2/admin/assertions?state=auto_validated"
+curl -s -X POST -H "X-K9-Admin-Secret: $K9_ADMIN_SECRET" -H "X-K9-Actor: admin-1" \
   -H 'Content-Type: application/json' http://127.0.0.1:8000/api/v2/admin/assertions/<id>/review \
-  -d '{"decision": "approved", "snapshot_id": "<snapshot_activo>", "comment": "pág. 57 lo afirma"}'
+  -d '{"decision": "rejected", "comment": "la pág. 57 no lo afirma"}'
 ```
 
-Antes de aprobar, abra la página citada y confirme que el texto afirma ese atributo para esa raza
-(el extractor por reglas detecta palabras, no comprende negaciones complejas ni el verbo «muestra»).
-Una aprobación sin `snapshot_id` se rechaza con `409 snapshot_required`. Si dos afirmaciones aprobadas
-se contradicen, el perfil marca el atributo como `conflicting` y ambas posiciones quedan visibles.
+Si dos afirmaciones publicadas se contradicen, el perfil marca el atributo como `conflicting` y ambas
+posiciones quedan visibles.
+
+**Medir la precisión del extractor.** Exporte una muestra reproducible, rellene la columna `label` con
+`correct` o `incorrect` tras abrir cada página citada, y calcule el resultado. Las filas sin etiqueta
+no cuentan en el denominador, y la precisión no bloquea la publicación:
+
+```bash
+PYTHONPATH=backend/src .venv/bin/python -m k9_expert.evaluation assertion-sample --data-dir "$K9_DATA_DIR" --size 50 --seed 20261104
+PYTHONPATH=backend/src .venv/bin/python -m k9_expert.evaluation assertion-precision evaluation/runs/assertion-sample-<snapshot>-seed20261104.csv
+```
 
 Para volver a un snapshot retenido, usa `POST /api/v1/admin/snapshots/{id}/rollback`. Se rechaza si su generación vectorial está incompleta o si contiene una fuente eliminada.
 

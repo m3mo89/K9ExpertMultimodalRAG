@@ -32,7 +32,7 @@ def test_profile_validation_reports_missing_fields_and_stable_value_error(tmp_pa
         {"key": "hunting_frequency", "values": ["ocasional"]},
     ]})
     assert incomplete.status_code == 200
-    assert "daily_availability" in incomplete.json()["missing_fields"]
+    assert incomplete.json()["missing_fields"] == ["modality", "terrain"]
     invalid = api.post("/api/v2/hunter-profiles/validate", json={"answers": [
         {"key": "prey", "values": ["dragon"]},
     ]})

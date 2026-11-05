@@ -11,6 +11,13 @@ describe('SystemView', () => {
       'GET /admin/health': {
         status: 'degraded',
         checked_at: '2026-11-01T00:00:00Z',
+        runtime_store: {
+          store_id: 'store-1',
+          canonical_path: '/tmp/k9-test',
+          path_fingerprint: 'hash',
+          disposable: true,
+          worker_alignment: 'stale',
+        },
         components: {
           api: { status: 'ok', detail: 'serving' },
           inference: { status: 'degraded', detail: 'inference_unreachable' },
@@ -55,6 +62,9 @@ describe('SystemView', () => {
 
     expect(await screen.findByText('Estado general:', { exact: false })).toHaveTextContent('Degradado')
     expect(screen.getByText('El trabajador no envía señal de vida reciente.')).toBeInTheDocument()
+    expect(screen.getByText('store-1')).toBeInTheDocument()
+    expect(screen.getByText('/tmp/k9-test')).toBeInTheDocument()
+    expect(screen.getByText('Señal obsoleta')).toBeInTheDocument()
     expect(screen.getByText('Modelos locales')).toBeInTheDocument()
     expect(await screen.findByText('25 %')).toBeInTheDocument()
     expect(screen.getByText('2 / 3')).toBeInTheDocument()

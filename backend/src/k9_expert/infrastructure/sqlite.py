@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import secrets
 import sqlite3
 from collections.abc import Callable, Iterator, Sequence
@@ -14,6 +15,11 @@ from types import TracebackType
 from typing import Literal, NamedTuple, cast
 from uuid import UUID, uuid4
 
+from k9_expert.application.runtime_store import (
+    RuntimeStoreIdentity,
+    is_disposable_root,
+    path_fingerprint,
+)
 from k9_expert.domain.breed_vocabulary import (
     BreedClassification,
     DocumentBreeds,
@@ -374,7 +380,7 @@ def now() -> str:
 
 
 class StructuredKnowledgeRepository:
-    """Authoritative assertion candidates, reviews and snapshot-scoped approved knowledge."""
+    """Authoritative assertion candidates, reviews and snapshot-scoped eligible knowledge."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self.database = database
@@ -464,6 +470,28 @@ class StructuredKnowledgeRepository:
                     (snapshot_id, assertion_id),
                 )
 
+    def published_rows(self, snapshot_id: str) -> list[dict[str, object]]:
+        """Every eligible assertion with its first citation, in stable order for sampling."""
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT a.id AS assertion_id, a.breed, a.attribute_key, a.value, a.polarity,
+                a.extraction_method, d.title AS source_title, f.page_start AS physical_page,
+                f.text AS fragment_text, MIN(f.page_start * 1000000 + f.ordinal) AS citation_order
+                FROM snapshot_assertions sa
+                JOIN assertion_candidates a ON a.id = sa.assertion_id
+                LEFT JOIN assertion_reviews r ON r.assertion_id = a.id
+                JOIN assertion_evidence ae ON ae.assertion_id = a.id
+                JOIN fragments f ON f.id = ae.fragment_id
+                JOIN document_versions v ON v.id = f.version_id
+                JOIN documents d ON d.id = v.document_id
+                WHERE sa.snapshot_id = ?
+                AND (a.extraction_state = 'auto_validated' OR r.decision = 'approved')
+                GROUP BY a.id ORDER BY a.id""", (snapshot_id,),
+            ).fetchall()
+        return [
+            {key: row[key] for key in row.keys() if key != "citation_order"} for row in rows
+        ]
+
     def candidates(self, state: str | None = None) -> list[dict[str, object]]:
         where = "WHERE a.extraction_state = ?" if state else ""
         parameters: tuple[object, ...] = (state,) if state else ()
@@ -481,7 +509,9 @@ class StructuredKnowledgeRepository:
             for row in rows
         ]
 
-    def approved(self, snapshot_id: str, breed: str | None = None) -> tuple[BreedAssertion, ...]:
+    def eligible(self, snapshot_id: str, breed: str | None = None) -> tuple[BreedAssertion, ...]:
+        """Snapshot assertions that are automatically validated and not vetoed (any review moves
+        them out of that state), or explicitly approved."""
         breed_clause = "AND a.breed = ?" if breed is not None else ""
         parameters: tuple[object, ...] = (snapshot_id, breed) if breed else (snapshot_id,)
         with self.database.connect() as connection:
@@ -491,7 +521,7 @@ class StructuredKnowledgeRepository:
                 p.printed_page_label
                 FROM snapshot_assertions sa
                 JOIN assertion_candidates a ON a.id = sa.assertion_id
-                JOIN assertion_reviews r ON r.assertion_id = a.id AND r.decision = 'approved'
+                LEFT JOIN assertion_reviews r ON r.assertion_id = a.id
                 JOIN assertion_evidence ae ON ae.assertion_id = a.id
                 JOIN fragments f ON f.id = ae.fragment_id
                 JOIN snapshot_membership sm ON sm.snapshot_id = sa.snapshot_id
@@ -501,6 +531,7 @@ class StructuredKnowledgeRepository:
                 LEFT JOIN pages p ON p.version_id = f.version_id
                   AND p.physical_page = f.page_start
                 WHERE sa.snapshot_id = ? {breed_clause}
+                AND (a.extraction_state = 'auto_validated' OR r.decision = 'approved')
                 ORDER BY a.breed, a.attribute_key, a.id, f.page_start""", parameters,
             ).fetchall()
         grouped: dict[str, list[sqlite3.Row]] = {}
@@ -529,7 +560,7 @@ class StructuredKnowledgeRepository:
             AssertionEvidenceState(str(first["evidence_state"])),
             AssertionExtractionState(str(first["extraction_state"])),
             str(first["extraction_method"]), str(first["policy_version"]), evidence,
-            ReviewDecision(str(first["decision"])),
+            ReviewDecision(str(first["decision"])) if first["decision"] else None,
         )
 
 
@@ -917,7 +948,62 @@ class SystemStateRepository:
             connection.execute("DELETE FROM system_state WHERE key = ?", (key,))
 
     def record_worker_heartbeat(self) -> None:
-        self.set("worker_heartbeat", now())
+        store_id = self.get("runtime_store_id")
+        self.record_process_presence("worker", store_id or "unknown")
+
+    def ensure_store_identity(self, canonical_path: Path) -> RuntimeStoreIdentity:
+        store_id = self.get("runtime_store_id")
+        if store_id is None:
+            store_id = str(uuid4())
+            self.set("runtime_store_id", store_id)
+        fingerprint = path_fingerprint(canonical_path)
+        self.set("runtime_store_path_fingerprint", fingerprint)
+        return RuntimeStoreIdentity(
+            store_id=store_id,
+            canonical_path=canonical_path,
+            path_fingerprint=fingerprint,
+            disposable=is_disposable_root(canonical_path),
+        )
+
+    def record_process_presence(self, role: Literal["api", "worker"], store_id: str) -> None:
+        key = f"process_presence_{role}"
+        existing = self.process_presence(role) or {}
+        continuing = (
+            existing.get("pid") == os.getpid() and existing.get("clean_shutdown") is not True
+        )
+        self.set(
+            key,
+            json.dumps(
+                {
+                    "role": role,
+                    "store_id": store_id,
+                    "pid": os.getpid(),
+                    "startup_id": existing.get("startup_id") if continuing else str(uuid4()),
+                    "started_at": existing.get("started_at") if continuing else now(),
+                    "heartbeat_at": now(),
+                    "clean_shutdown": False,
+                },
+                sort_keys=True,
+            ),
+        )
+
+    def clear_process_presence(self, role: Literal["api", "worker"]) -> None:
+        found = self.process_presence(role)
+        if found is None:
+            return
+        found["heartbeat_at"] = now()
+        found["clean_shutdown"] = True
+        self.set(f"process_presence_{role}", json.dumps(found, sort_keys=True))
+
+    def process_presence(self, role: Literal["api", "worker"]) -> dict[str, object] | None:
+        raw = self.get(f"process_presence_{role}")
+        if raw is None:
+            return None
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, dict) else None
 
     def queries_disabled_reason(self) -> str | None:
         return self.get("queries_disabled_reason")
@@ -1460,7 +1546,7 @@ class SnapshotRepository:
         for _ in range(PUBLICATION_ATTEMPTS):
             with self.database.transaction() as connection:
                 candidate = stage(connection)
-                self._stage_approved_assertions(connection, snapshot_id)
+                self._stage_eligible_assertions(connection, snapshot_id)
                 staged_state = _publication_state(connection, candidate.document_id)
                 rows = list(connection.execute(INDEX_FRAGMENTS_SQL, (str(snapshot_id),)))
             try:
@@ -1489,17 +1575,17 @@ class SnapshotRepository:
             )
 
     @staticmethod
-    def _stage_approved_assertions(connection: sqlite3.Connection, snapshot_id: UUID) -> None:
-        """Only approved candidates whose complete evidence set belongs to this candidate
-        snapshot become visible. This runs in the same transaction as membership staging, so a
+    def _stage_eligible_assertions(connection: sqlite3.Connection, snapshot_id: UUID) -> None:
+        """Only eligible assertions (see `StructuredKnowledgeRepository.eligible`) whose complete
+        evidence set belongs to this candidate snapshot become visible. This runs in the same transaction as membership staging, so a
         failed index validation rolls both back together."""
         connection.execute(
             """INSERT OR IGNORE INTO snapshot_assertions (snapshot_id, assertion_id)
             SELECT ?, candidate.id
             FROM assertion_candidates candidate
-            JOIN assertion_reviews review ON review.assertion_id = candidate.id
-              AND review.decision = 'approved'
-            WHERE NOT EXISTS (
+            LEFT JOIN assertion_reviews review ON review.assertion_id = candidate.id
+            WHERE (candidate.extraction_state = 'auto_validated' OR review.decision = 'approved')
+            AND NOT EXISTS (
               SELECT 1 FROM assertion_evidence evidence
               LEFT JOIN snapshot_membership membership
                 ON membership.snapshot_id = ? AND membership.fragment_id = evidence.fragment_id

@@ -6,16 +6,23 @@ Todo corre en la Mac del usuario: Ollama (modelos), Chroma (vectores), SQLite (d
 
 ## Recomendación guiada v2
 
-La pantalla principal incluye un asistente de cinco pasos que reúne presa, modalidad, terreno,
-experiencia y disponibilidad diaria. El análisis documental avanzado sigue disponible como alternativa.
+La pantalla principal incluye un asistente de tres pasos que reúne presa, trabajo esperado y terreno.
+Son los aspectos que el corpus permite documentar: la experiencia y la disponibilidad diaria no se
+preguntan, y la API las acepta como opcionales sin que influyan en el resultado. El análisis documental
+avanzado sigue disponible como alternativa.
 
 Cada resultado muestra dos medidas independientes:
 
 - **Compatibilidad**: cuánto coincide la raza con el perfil en los aspectos que las fuentes documentan,
   calculada por una política determinista versionada y presentada como banda (alta, moderada, baja).
-- **Cobertura de evidencia**: qué parte del peso del perfil está documentada por afirmaciones
-  aprobadas. Un aspecto sin evidencia baja la cobertura pero no cuenta a favor ni en contra; por
-  debajo de la cobertura mínima la raza no se recomienda.
+- **Cobertura de evidencia**: qué parte del peso de presa, trabajo y terreno está documentada por
+  afirmaciones publicadas. Un aspecto sin evidencia baja la cobertura pero no cuenta a favor ni en
+  contra; por debajo de la cobertura mínima la raza no se recomienda.
+
+Las afirmaciones se extraen con reglas deterministas y se publican automáticamente tras validar su
+vocabulario y su evidencia. **Ninguna persona las revisa**, por lo que pueden contener errores; los
+resultados lo advierten y citan la página. Las reglas sólo entienden español: use la Enciclopedia y
+no otros PDF. Para medir la precisión vea `docs/operations/local-operations.md`.
 
 Ollama solo puede redactar una narrativa opcional; nunca cambia orden, bandas ni cobertura. Para
 desactivar el flujo guiado vea `docs/operations/local-operations.md` §12.
@@ -61,6 +68,7 @@ Comprueba Ollama en loopback, los cuatro modelos, el snapshot activo, el índice
 
 ```bash
 export K9_ADMIN_SECRET='un-secreto-largo'
+export K9_DATA_DIR="$PWD/data"
 make serve                          # API en http://127.0.0.1:8000  (OpenAPI en /docs)
 make worker                         # trabajador de ingesta
 npm --prefix frontend run dev       # interfaz en http://127.0.0.1:5173

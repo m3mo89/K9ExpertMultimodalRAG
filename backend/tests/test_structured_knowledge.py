@@ -1,10 +1,18 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from k9_expert.application.structured_knowledge import StructuredBreedProfileService
-from k9_expert.domain.models import AssertionPolarity, ReviewDecision
-from k9_expert.infrastructure.sqlite import SqliteDatabase, StructuredKnowledgeRepository
+from k9_expert.domain.models import (
+    AssertionExtractionState,
+    AssertionPolarity,
+    ReviewDecision,
+)
+from k9_expert.infrastructure.sqlite import (
+    SnapshotRepository,
+    SqliteDatabase,
+    StructuredKnowledgeRepository,
+)
 
 
 def seeded(tmp_path):  # type: ignore[no-untyped-def]
@@ -49,12 +57,18 @@ def seeded(tmp_path):  # type: ignore[no-untyped-def]
 def candidate(
     repository: StructuredKnowledgeRepository, fragment_id: str,
     polarity: AssertionPolarity = AssertionPolarity.SUPPORTS, value: str = "rastreo",
+    state: AssertionExtractionState = AssertionExtractionState.CANDIDATE,
 ) -> str:
     return repository.create_candidate(
         assertion_id=uuid4(), breed="Raza", attribute_key="modality", value=value,
         polarity=polarity, fragment_ids=[fragment_id], extraction_method="rule-v1",
-        policy_version="structured-knowledge-v1",
+        policy_version="structured-knowledge-v1", extraction_state=state,
     )
+
+
+def stage(database: SqliteDatabase, snapshot: str) -> None:
+    with database.transaction() as connection:
+        SnapshotRepository._stage_eligible_assertions(connection, UUID(snapshot))
 
 
 def test_additive_migration_and_duplicate_candidate_reconciliation(tmp_path) -> None:
@@ -87,14 +101,14 @@ def test_rejected_and_withdrawn_assertions_are_not_resolved(tmp_path) -> None:
     repository = StructuredKnowledgeRepository(database)
     rejected = candidate(repository, fragment)
     repository.review(rejected, "expert", ReviewDecision.REJECTED, None)
-    assert repository.approved(snapshot, "Raza") == ()
+    assert repository.eligible(snapshot, "Raza") == ()
     approved = candidate(repository, fragment, value="rastro_herido")
     repository.review(approved, "expert", ReviewDecision.APPROVED, snapshot)
     with database.transaction() as connection:
         connection.execute(
             "DELETE FROM snapshot_membership WHERE snapshot_id = ?", (snapshot,)
         )
-    assert repository.approved(snapshot, "Raza") == ()
+    assert repository.eligible(snapshot, "Raza") == ()
 
 
 def test_review_requires_identity_snapshot_and_existing_evidence(tmp_path) -> None:
@@ -107,3 +121,48 @@ def test_review_requires_identity_snapshot_and_existing_evidence(tmp_path) -> No
         repository.review(item, "expert", ReviewDecision.APPROVED, None)
     with pytest.raises(ValueError, match="assertion_evidence_invalid"):
         candidate(repository, str(uuid4()))
+
+
+def test_auto_validated_assertion_publishes_without_review(tmp_path) -> None:
+    database, snapshot, fragment = seeded(tmp_path)
+    repository = StructuredKnowledgeRepository(database)
+    candidate(repository, fragment, state=AssertionExtractionState.AUTO_VALIDATED)
+    assert repository.eligible(snapshot, "Raza") == ()
+    stage(database, snapshot)
+    [assertion] = repository.eligible(snapshot, "Raza")
+    assert assertion.review_decision is None
+    assert assertion.extraction_state == AssertionExtractionState.AUTO_VALIDATED
+    assert [row["value"] for row in repository.published_rows(snapshot)] == ["rastreo"]
+
+
+def test_unapproved_model_candidate_is_never_staged(tmp_path) -> None:
+    database, snapshot, fragment = seeded(tmp_path)
+    repository = StructuredKnowledgeRepository(database)
+    item = candidate(repository, fragment)
+    stage(database, snapshot)
+    assert repository.eligible(snapshot, "Raza") == ()
+    repository.review(item, "expert", ReviewDecision.APPROVED, snapshot)
+    assert len(repository.eligible(snapshot, "Raza")) == 1
+
+
+def test_veto_removes_assertion_and_later_snapshots_do_not_restore_it(tmp_path) -> None:
+    database, snapshot, fragment = seeded(tmp_path)
+    repository = StructuredKnowledgeRepository(database)
+    item = candidate(repository, fragment, state=AssertionExtractionState.AUTO_VALIDATED)
+    stage(database, snapshot)
+    repository.review(item, "expert", ReviewDecision.REJECTED, None, "no lo afirma")
+    assert repository.eligible(snapshot, "Raza") == ()
+    assert repository.published_rows(snapshot) == []
+    stage(database, snapshot)
+    assert repository.eligible(snapshot, "Raza") == ()
+
+
+def test_staging_requires_complete_evidence_in_the_snapshot(tmp_path) -> None:
+    database, snapshot, fragment = seeded(tmp_path)
+    repository = StructuredKnowledgeRepository(database)
+    candidate(repository, fragment, state=AssertionExtractionState.AUTO_VALIDATED)
+    with database.transaction() as connection:
+        connection.execute("DELETE FROM snapshot_membership WHERE snapshot_id = ?", (snapshot,))
+    stage(database, snapshot)
+    with database.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM snapshot_assertions").fetchone()[0] == 0

@@ -31,6 +31,7 @@ const tone: Record<ComponentState, 'ok' | 'warn' | 'error'> = {
 const detailLabels: Record<string, string> = {
   worker_never_seen: 'El trabajador de ingesta no se ha iniciado.',
   worker_heartbeat_stale: 'El trabajador no envía señal de vida reciente.',
+  worker_store_mismatch: 'El trabajador está conectado a otro almacén de datos.',
   low_disk_space: 'Queda poco espacio en disco.',
   storage_not_writable: 'No se puede escribir en el almacenamiento.',
   no_active_snapshot: 'No hay un snapshot publicado; las consultas se abstendrán.',
@@ -48,7 +49,7 @@ function Diagnostics({ admin }: { admin: AdminCredentials }) {
   const report = useAsync(load)
   if (report.error !== null) return <ErrorNotice error={report.error} onRetry={report.reload} />
   if (!report.data) return <p aria-live="polite">Comprobando componentes…</p>
-  const { status, checked_at, components } = report.data
+  const { status, checked_at, components, runtime_store: store } = report.data
   return (
     <section className="card" aria-labelledby="components-heading">
       <div className="card-head">
@@ -60,6 +61,26 @@ function Diagnostics({ admin }: { admin: AdminCredentials }) {
       <p className={`notice notice-${status === 'ok' ? 'ok' : status === 'degraded' ? 'warn' : 'error'}`} role="status">
         Estado general: <strong>{componentStateLabels[status]}</strong> · {formatDate(checked_at)}
       </p>
+      {store && (
+        <dl className="stat-row" aria-label="Almacén de datos activo">
+          <div className="stat">
+            <dt>Almacén API</dt>
+            <dd className="mono">{store.store_id}</dd>
+          </div>
+          <div className="stat">
+            <dt>Ruta canónica</dt>
+            <dd className="mono">{store.canonical_path}</dd>
+          </div>
+          <div className="stat">
+            <dt>Alineación del worker</dt>
+            <dd>{store.worker_alignment === 'aligned' ? 'Alineado' : store.worker_alignment === 'stale' ? 'Señal obsoleta' : 'No encontrado'}</dd>
+          </div>
+          <div className="stat">
+            <dt>Persistencia</dt>
+            <dd>{store.disposable ? 'Temporal' : 'Persistente'}</dd>
+          </div>
+        </dl>
+      )}
       <ul className="component-grid">
         {Object.entries(components).map(([name, component]) => (
           <li key={name} className={`component component-${component.status}`}>

@@ -39,6 +39,42 @@ export const criterionLabels: Record<CriterionKey, string> = {
   work_aptitude: 'Aptitud de trabajo',
 }
 
+export const dimensionLabels: Record<string, string> = {
+  prey: 'Presa',
+  modality: 'Trabajo del perro',
+  terrain: 'Terreno',
+  experience: 'Experiencia del propietario',
+  daily_availability: 'Tiempo diario disponible',
+  hunting_frequency: 'Frecuencia de caza',
+  climate: 'Clima',
+  space: 'Espacio disponible',
+  care_preference: 'Nivel de cuidados',
+}
+
+const limitationMessages: Record<string, string> = {
+  narrative_unavailable: 'No se generó la síntesis narrativa; los resultados y sus citas no cambian.',
+  profile_incomplete: 'Faltan respuestas necesarias para recomendar una raza.',
+  no_active_snapshot: 'Todavía no hay una biblioteca publicada para consultar.',
+}
+
+/** Plain-language text for a recommendation limitation; internal codes never reach the user. */
+export function recommendationLimitation(code: string): string {
+  const [name, dimension] = code.split(':')
+  if (name === 'dimension_not_evaluated') {
+    return `${dimensionLabels[dimension] ?? 'Una respuesta'}: las fuentes no permiten evaluarlo, así que no influye en el resultado.`
+  }
+  return limitationMessages[code] ?? 'Se aplicó una limitación adicional a este resultado.'
+}
+
+/** Plain-language text for a candidate penalty. */
+export function recommendationPenalty(code: string): string {
+  const [name, dimension] = code.split(':')
+  const label = dimensionLabels[dimension] ?? 'otro aspecto'
+  if (name === 'documented_incompatibility') return `La fuente documenta una incompatibilidad en: ${label}.`
+  if (name === 'hard_constraint') return `No cumple un requisito obligatorio en: ${label}.`
+  return 'Se aplicó una penalización adicional.'
+}
+
 export const cacheLabels: Record<string, string> = {
   miss: 'Sin caché',
   exact: 'Caché exacta',

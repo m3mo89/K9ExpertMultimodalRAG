@@ -34,7 +34,7 @@ def test_translator_preserves_original_answers_and_normalizes_dimensions() -> No
     assert [item.key for item in translated.dimensions] == [
         "prey", "modality", "terrain", "experience", "daily_availability"
     ]
-    assert translated.translator_version == "hunter-profile-v1"
+    assert translated.translator_version == "hunter-profile-v2"
 
 
 def test_missing_and_ambiguous_answers_return_stable_errors() -> None:
@@ -42,7 +42,7 @@ def test_missing_and_ambiguous_answers_return_stable_errors() -> None:
         answer("prey", "venado"), answer("terrain", "bosque"),
     )))
     assert translated.completeness == ProfileCompleteness.INCOMPLETE
-    assert translated.missing_fields == ("modality", "experience", "daily_availability")
+    assert translated.missing_fields == ("modality",)
     with pytest.raises(ValueError, match="profile_cardinality_invalid:experience"):
         HunterProfileTranslator().translate(HunterProfile((
             answer("experience", "principiante", "avanzada"),
@@ -62,14 +62,24 @@ def test_multiple_selection_and_required_constraint_are_deterministic() -> None:
     assert translated.constraints[0].dimension == "modality"
 
 
-def test_hunting_frequency_does_not_replace_daily_availability() -> None:
+def test_owner_answers_are_optional_and_not_inferred() -> None:
     profile = HunterProfile((
-        answer("prey", "venado"), answer("modality", "rastreo"),
-        answer("terrain", "monte_denso"), answer("experience", "principiante"),
-        answer("hunting_frequency", "ocasional"),
+        answer("prey", "venado"), answer("modality", "rastreo"), answer("terrain", "monte_denso"),
     ))
     translated = HunterProfileTranslator().translate(profile)
-    assert translated.missing_fields == ("daily_availability",)
+    assert translated.completeness == ProfileCompleteness.COMPLETE
+    assert translated.missing_fields == ()
+    assert [item.key for item in translated.dimensions] == ["prey", "modality", "terrain"]
+
+
+def test_several_species_expand_to_concrete_prey_and_keep_the_original() -> None:
+    profile = HunterProfile((
+        answer("prey", "varias_especies"), answer("modality", "rastreo"),
+        answer("terrain", "bosque"),
+    ))
+    translated = HunterProfileTranslator().translate(profile)
+    assert translated.dimensions[0].values == ("venado", "jabalí", "conejo", "liebre", "aves")
+    assert translated.original.answers[0].values == ("varias_especies",)
 
 
 def test_profile_rejects_unknown_values_duplicates_and_schema() -> None:

@@ -174,9 +174,17 @@ class IngestionWorker:
                         candidate
                         for chunk, classification in zip(chunks, classifications, strict=True)
                         for candidate in extractor.extract(
-                            classification.breed, chunk.text, fragment_ids[chunk.content_hash]
+                            classification.breed, chunk.text, fragment_ids[chunk.content_hash],
+                            chunk.section_path,
                         )
                     ]
+                    candidates.extend(extractor.extract_group_functions(
+                        (
+                            classification.breed, classification.hunting_functions,
+                            fragment_ids[chunk.content_hash],
+                        )
+                        for chunk, classification in zip(chunks, classifications, strict=True)
+                    ))
                     count = persist_candidates(self.structured_knowledge, candidates)
                     trace.set(assertion_candidates=count)
             counted = self.embedding_counter() if self.embedding_counter else (0, 0)

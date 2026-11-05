@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from k9_expert.domain.hunter_profile import (
+    ANY_PREY,
     FIELD_BY_KEY,
     PROFILE_TRANSLATOR_VERSION,
     REQUIRED_FIELDS,
@@ -43,7 +44,7 @@ class HunterProfileTranslator:
         dimensions = tuple(
             RecommendationDimension(
                 key=answer.key,
-                values=answer.values,
+                values=self._normalized_values(answer.key, answer.values),
                 weight=DIMENSION_WEIGHTS[answer.key],
                 required=FIELD_BY_KEY[answer.key].required,
             )
@@ -64,3 +65,10 @@ class HunterProfileTranslator:
             missing_fields=missing,
             translator_version=self.version,
         )
+
+    @staticmethod
+    def _normalized_values(key: str, values: tuple[str, ...]) -> tuple[str, ...]:
+        """No assertion documents `varias_especies`, so it stands for every concrete prey."""
+        if key != "prey" or ANY_PREY not in values:
+            return values
+        return tuple(value for value in FIELD_BY_KEY[key].values if value != ANY_PREY)

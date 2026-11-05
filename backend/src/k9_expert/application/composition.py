@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import httpx
@@ -50,6 +50,7 @@ from k9_expert.application.recommendation_context import RecommendationContextSe
 from k9_expert.application.recovery import BackupService, IndexMaintainer, RestoreService
 from k9_expert.application.response_cache import AnalysisResponseCache, QueryResponseCache
 from k9_expert.application.routing import ComplexityRouter
+from k9_expert.application.runtime_store import RuntimeStoreIdentity, resolve_data_root
 from k9_expert.application.structured_knowledge import StructuredBreedProfileService
 from k9_expert.infrastructure.breed_images import PdfBreedImages
 from k9_expert.infrastructure.embeddings import (
@@ -162,6 +163,7 @@ class ApplicationContainer:
     structured_breed_profiles: StructuredBreedProfileService
     recommendation_service: HunterRecommendationService
     recommendation_context_service: RecommendationContextService
+    runtime_store: RuntimeStoreIdentity
 
 
 # TOML key -> settings field. The admin secret is deliberately not read from files.
@@ -210,6 +212,10 @@ def load_settings(environ: Mapping[str, str] | None = None) -> ApplicationSettin
     """Settings from the TOML file named by K9_CONFIG plus K9_DATA_DIR and K9_ADMIN_SECRET."""
     env = os.environ if environ is None else environ
     config_path = Path(env.get("K9_CONFIG", "config/k9.defaults.toml"))
+    if not config_path.is_absolute():
+        from k9_expert.application.runtime_store import PROJECT_ROOT
+
+        config_path = (PROJECT_ROOT / config_path).resolve(strict=False)
     values: dict[str, object] = {}
     if config_path.is_file():
         raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -217,7 +223,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> ApplicationSettin
             if key in raw.get(section, {}):
                 values[field_name] = raw[section][key]
     return ApplicationSettings(
-        data_dir=Path(env.get("K9_DATA_DIR", "data")),
+        data_dir=resolve_data_root(env.get("K9_DATA_DIR", "data")),
         admin_secret=env.get("K9_ADMIN_SECRET") or None,
         config_path=config_path,
         **values,  # type: ignore[arg-type]
@@ -231,6 +237,7 @@ def compose(
 ) -> ApplicationContainer:
     """Build the production container; tests may substitute local-model adapters."""
     resolved = settings or load_settings()
+    resolved = replace(resolved, data_dir=resolve_data_root(resolved.data_dir))
     database = SqliteDatabase(resolved.data_dir / "k9.sqlite")
     database.migrate()
     file_store = ManagedFileStore(resolved.files_dir)
@@ -240,6 +247,7 @@ def compose(
     structured_knowledge = StructuredKnowledgeRepository(database)
     recommendation_contexts = RecommendationContextRepository(database)
     state = SystemStateRepository(database)
+    runtime_store = state.ensure_store_identity(resolved.data_dir)
     service = DocumentRegistrationService(
         file_store,
         documents,
@@ -441,6 +449,7 @@ def compose(
             resolved.files_dir,
             resolved.index_dir,
             probe,
+            runtime_store,
         ),
         metrics_service=OperationalMetricsService(database, telemetry, probe),
         telemetry=telemetry,
@@ -499,6 +508,7 @@ def compose(
         recommendation_context_service=RecommendationContextService(
             RecommendationRepository(database), recommendation_contexts
         ),
+        runtime_store=runtime_store,
     )
 
 

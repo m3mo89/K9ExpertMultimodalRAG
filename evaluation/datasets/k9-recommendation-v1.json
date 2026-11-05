@@ -10,7 +10,7 @@
         "experience": ["principiante"]
       },
       "expected_abstention": true,
-      "expected_missing_fields": ["modality", "daily_availability"],
+      "expected_missing_fields": ["modality"],
       "specialist_judgments": [],
       "evidence_labels": []
     }

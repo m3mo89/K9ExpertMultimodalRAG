@@ -311,20 +311,21 @@ sequenceDiagram
 flowchart LR
   profile[Perfil del cazador] --> translator[Traductor versionado]
   translator --> engine[Motor determinista]
-  assertions[Afirmaciones revisadas\ncon evidencia] --> engine
+  assertions[Afirmaciones validadas\ncon evidencia] --> engine
   engine --> result[Top 3 + cobertura\nconflictos + limitaciones]
   result --> context[Contexto de chat inmutable]
   context --> explanation[Explicación acotada]
   assertions --> snapshot[Snapshot publicado]
 ```
 
-El puntaje lee sólo afirmaciones aprobadas de SQLite asociadas al snapshot. Chroma sigue siendo
+El puntaje lee sólo afirmaciones publicadas de SQLite asociadas al snapshot. Chroma sigue siendo
 un índice derivado para evidencia; Ollama puede redactar narrativa validada, pero no crea ni altera
 orden, compatibilidad, cobertura o citas.
 
-Las afirmaciones nacen como candidatas en la ingesta (`application/assertion_extraction.py`, valores
-en el vocabulario del perfil), y solo un revisor autorizado las aprueba con
-`POST /api/v2/admin/assertions/{id}/review`. El traductor (`application/profile_translation.py`) y el
+Las afirmaciones nacen en la ingesta (`application/assertion_extraction.py`, valores en el vocabulario
+del perfil). Las de reglas deterministas que superan la validación se publican con el snapshot sin
+revisión humana; las de un modelo nunca se publican sin aprobación explícita. Un administrador puede
+vetar cualquiera con `POST /api/v2/admin/assertions/{id}/review`. El traductor (`application/profile_translation.py`) y el
 motor (`application/recommendation.py`) son deterministas y versionados; cada recomendación guarda
 perfil original, dimensiones normalizadas, snapshot, versiones y orden para poder reproducirla.
 

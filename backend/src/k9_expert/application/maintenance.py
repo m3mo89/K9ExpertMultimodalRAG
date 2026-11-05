@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 
 from k9_expert.application.observability import TelemetryService
+from k9_expert.application.runtime_store import RuntimeStoreIdentity
 from k9_expert.domain.models import JobStage
 from k9_expert.infrastructure.sqlite import (
     SCHEMA_VERSION,
@@ -147,6 +148,7 @@ class HealthService:
         files_root: Path,
         index_root: Path,
         model_probe: Callable[[], ComponentHealth],
+        runtime_store: RuntimeStoreIdentity,
         heartbeat_timeout_seconds: int = 60,
         minimum_free_bytes: int = 1024**3,
     ) -> None:
@@ -155,6 +157,7 @@ class HealthService:
         self.files_root = files_root
         self.index_root = index_root
         self.model_probe = model_probe
+        self.runtime_store = runtime_store
         self.heartbeat_timeout = timedelta(seconds=heartbeat_timeout_seconds)
         self.minimum_free_bytes = minimum_free_bytes
 
@@ -178,6 +181,13 @@ class HealthService:
         return {
             "status": overall,
             "checked_at": datetime.now(UTC).isoformat(),
+            "runtime_store": {
+                "store_id": self.runtime_store.store_id,
+                "canonical_path": str(self.runtime_store.canonical_path),
+                "path_fingerprint": self.runtime_store.path_fingerprint,
+                "disposable": self.runtime_store.disposable,
+                "worker_alignment": self.worker_alignment(),
+            },
             "components": {
                 name: {"status": item.status, "detail": item.detail}
                 for name, item in components.items()
@@ -195,12 +205,32 @@ class HealthService:
         return ComponentHealth("ok", "schema_current")
 
     def _worker(self) -> ComponentHealth:
+        presence = self.state.process_presence("worker")
+        if presence is not None:
+            heartbeat = presence.get("heartbeat_at")
+            if presence.get("store_id") != self.runtime_store.store_id:
+                return ComponentHealth("degraded", "worker_store_mismatch")
+            if presence.get("clean_shutdown") is True:
+                return ComponentHealth("degraded", "worker_never_seen")
+            if not isinstance(heartbeat, str):
+                return ComponentHealth("degraded", "worker_never_seen")
+            if datetime.now(UTC) - datetime.fromisoformat(heartbeat) > self.heartbeat_timeout:
+                return ComponentHealth("degraded", "worker_heartbeat_stale")
+            return ComponentHealth("ok", "worker_alive")
         heartbeat = self.state.get("worker_heartbeat")
         if heartbeat is None:
             return ComponentHealth("degraded", "worker_never_seen")
         if datetime.now(UTC) - datetime.fromisoformat(heartbeat) > self.heartbeat_timeout:
             return ComponentHealth("degraded", "worker_heartbeat_stale")
         return ComponentHealth("ok", "worker_alive")
+
+    def worker_alignment(self) -> Literal["aligned", "missing", "stale"]:
+        worker = self._worker()
+        if worker.status == "ok":
+            return "aligned"
+        if worker.detail == "worker_heartbeat_stale":
+            return "stale"
+        return "missing"
 
     def _storage(self) -> ComponentHealth:
         root = self.files_root if self.files_root.exists() else self.files_root.parent

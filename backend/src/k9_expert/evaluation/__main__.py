@@ -11,6 +11,12 @@ from uuid import uuid4
 from k9_expert.application.composition import ApplicationSettings, compose
 from k9_expert.application.generation import OllamaTextGateway
 from k9_expert.application.routing import ComplexityRouter
+from k9_expert.evaluation.assertion_precision import (
+    extraction_precision,
+    read_labels,
+    sample_assertions,
+    write_sample,
+)
 from k9_expert.evaluation.calibration import calibrate_semantic_cache, calibrate_sufficiency
 from k9_expert.evaluation.dataset import load_dataset
 from k9_expert.evaluation.layers import (
@@ -33,7 +39,12 @@ from k9_expert.evaluation.runner import (
     environment,
     run_experiment,
 )
-from k9_expert.infrastructure.sqlite import SnapshotRepository, SqliteDatabase
+from k9_expert.infrastructure.sqlite import (
+    DocumentRepository,
+    SnapshotRepository,
+    SqliteDatabase,
+    StructuredKnowledgeRepository,
+)
 
 DEFAULT_DATASET = Path("evaluation/datasets/k9-reference-v2.json")
 DEFAULT_RUBRIC = Path("evaluation/datasets/k9-rubric-v1.json")
@@ -232,6 +243,21 @@ def score(args: argparse.Namespace) -> Path:
     return path
 
 
+def assertion_sample(args: argparse.Namespace) -> Path:
+    database = SqliteDatabase(args.data_dir / "k9.sqlite")
+    snapshot = DocumentRepository(database).active_snapshot_id()
+    if snapshot is None:
+        raise SystemExit("no_active_snapshot")
+    rows = StructuredKnowledgeRepository(database).published_rows(snapshot)
+    name = f"assertion-sample-{snapshot[:8]}-seed{args.seed}.csv"
+    return write_sample(sample_assertions(rows, args.size, args.seed), args.output / name)
+
+
+def assertion_precision(args: argparse.Namespace) -> str:
+    report = extraction_precision(read_labels(args.sheet))
+    return json.dumps(report, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m k9_expert.evaluation")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -271,6 +297,19 @@ def main() -> None:
     )
     score_parser.add_argument("--justification")
     score_parser.set_defaults(handler=score)
+    sample_parser = commands.add_parser(
+        "assertion-sample", help="Export published assertions for manual labeling."
+    )
+    sample_parser.add_argument("--data-dir", type=Path, default=Path("data"))
+    sample_parser.add_argument("--seed", type=int, default=20261104)
+    sample_parser.add_argument("--size", type=int, default=50)
+    sample_parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    sample_parser.set_defaults(handler=assertion_sample)
+    precision_parser = commands.add_parser(
+        "assertion-precision", help="Report extraction precision from a labeled sample."
+    )
+    precision_parser.add_argument("sheet", type=Path)
+    precision_parser.set_defaults(handler=assertion_precision)
     args = parser.parse_args()
     print(args.handler(args))
 

@@ -110,8 +110,6 @@ const v2Routes: Record<string, unknown> = {
       { key: 'prey', values: ['venado'], weight: 0.3, required: true },
       { key: 'modality', values: ['rastreo'], weight: 0.3, required: true },
       { key: 'terrain', values: ['monte_denso'], weight: 0.25, required: true },
-      { key: 'experience', values: ['principiante'], weight: 0.2, required: true },
-      { key: 'daily_availability', values: ['1_2h'], weight: 0.15, required: true },
     ],
   },
   'POST /recommendations': {

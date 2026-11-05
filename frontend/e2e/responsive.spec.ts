@@ -71,7 +71,7 @@ test('the default view completes a BreedMatch analysis without chat', async ({ p
 
 test('guided recommendation completes, compares results and remains accessible', async ({ page }) => {
   await page.goto('/#/analizar')
-  for (const label of ['Venado', 'Seguir un rastro', 'Monte denso', 'Principiante', 'Entre una y dos horas']) {
+  for (const label of ['Venado', 'Seguir un rastro', 'Monte denso']) {
     await page.getByRole('button', { name: label }).click()
     await page.getByRole('button', { name: /Continuar|Revisar perfil/ }).click()
   }

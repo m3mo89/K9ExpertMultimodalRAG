@@ -9,7 +9,9 @@ from uuid import UUID, uuid4
 from k9_expert.application.generation import GeneratedAnswer
 from k9_expert.application.observability import TraceRecorder
 from k9_expert.domain.errors import ModelUnavailableError
+from k9_expert.domain.hunter_profile import EVALUABLE_DIMENSIONS
 from k9_expert.domain.models import (
+    AssertionExtractionState,
     AssertionPolarity,
     BreedAssertion,
     ProfileCompleteness,
@@ -34,15 +36,19 @@ NarrateRecommendation = Callable[[RecommendationResult], GeneratedAnswer]
 
 @dataclass(frozen=True, slots=True)
 class RecommendationPolicy:
-    version: str = "recommendation-v2-draft"
+    version: str = "recommendation-v3"
     minimum_coverage: float = 0.5
     high_threshold: float = 0.75
+    high_coverage_threshold: float = 0.70
     moderate_threshold: float = 0.5
     contradiction_penalty: float = 0.10
     max_results: int = 3
 
     def __post_init__(self) -> None:
-        values = (self.minimum_coverage, self.high_threshold, self.moderate_threshold)
+        values = (
+            self.minimum_coverage, self.high_threshold, self.moderate_threshold,
+            self.high_coverage_threshold,
+        )
         if any(not 0 <= value <= 1 for value in values):
             raise ValueError("recommendation_policy_threshold_invalid")
         if self.high_threshold < self.moderate_threshold or self.max_results not in range(1, 4):
@@ -70,6 +76,7 @@ class DeterministicRecommendationEngine:
             key=lambda item: (
                 -(item.compatibility if item.compatibility is not None else -1),
                 -item.coverage,
+                -item.supporting_fragments,
                 item.breed,
             ),
         )[: self.policy.max_results])
@@ -86,8 +93,9 @@ class DeterministicRecommendationEngine:
         weighted_match = documented_mass = penalties = 0.0
         excluded = False
         penalty_reasons: list[str] = []
-        total_weight = sum(dimension.weight for dimension in profile.dimensions)
-        for dimension in profile.dimensions:
+        evaluable = [item for item in profile.dimensions if item.key in EVALUABLE_DIMENSIONS]
+        total_weight = sum(dimension.weight for dimension in evaluable)
+        for dimension in evaluable:
             result, contradiction = self._dimension(dimension, grouped.get(dimension.key, []))
             results.append(result)
             if result.documented:
@@ -108,12 +116,17 @@ class DeterministicRecommendationEngine:
         )
         return RecommendationCandidate(
             breed=breed,
-            band=self._band(compatibility),
+            band=self._band(compatibility, coverage),
             compatibility=compatibility,
             coverage=coverage,
             dimensions=tuple(results),
             penalties=tuple(penalty_reasons),
             excluded=excluded,
+            supporting_fragments=len({
+                evidence_id
+                for result in results if result.compatibility == 1.0
+                for evidence_id in result.evidence_ids
+            }),
         )
 
     @staticmethod
@@ -134,10 +147,13 @@ class DeterministicRecommendationEngine:
             dimension.key, compatibility, True, conflicting, evidence_ids
         ), contradicts and not supports
 
-    def _band(self, compatibility: float | None) -> RecommendationBand | None:
+    def _band(self, compatibility: float | None, coverage: float) -> RecommendationBand | None:
         if compatibility is None:
             return None
-        if compatibility >= self.policy.high_threshold:
+        if (
+            compatibility >= self.policy.high_threshold
+            and coverage >= self.policy.high_coverage_threshold
+        ):
             return RecommendationBand.HIGH
         if compatibility >= self.policy.moderate_threshold:
             return RecommendationBand.MODERATE
@@ -184,11 +200,16 @@ class HunterRecommendationService:
             trace.finish(self.sink, "incomplete", reason)
             return result
         breeds = list(profile.original.candidate_breeds) or self.breed_names()
-        assertions = {breed: self.knowledge.approved(snapshot, breed) for breed in breeds}
+        published: dict[str, list[BreedAssertion]] = defaultdict(list)
+        for assertion in self.knowledge.eligible(snapshot):
+            published[assertion.breed].append(assertion)
+        assertions = {breed: published.get(breed, []) for breed in breeds}
         with trace.stage("deterministic_ranking"):
             candidates = self.engine.recommend(profile, assertions)
-        limitations: list[str] = []
-        if len(candidates) < self.engine.policy.max_results:
+        limitations = _knowledge_limitations(profile, candidates, assertions)
+        if not candidates:
+            limitations.append("no_candidate_reached_coverage")
+        elif len(candidates) < self.engine.policy.max_results:
             limitations.append("fewer_supported_candidates")
         result = RecommendationResult(
             RecommendationId(uuid4()), profile, self.engine.policy.version,
@@ -235,6 +256,28 @@ class HunterRecommendationService:
         self.repository.save(result)
         trace.finish(self.sink, "completed")
         return result
+
+
+def _knowledge_limitations(
+    profile: TranslatedHunterProfile,
+    candidates: Sequence[RecommendationCandidate],
+    assertions: Mapping[str, Sequence[BreedAssertion]],
+) -> list[str]:
+    limitations = [
+        f"dimension_not_evaluated:{dimension.key}"
+        for dimension in profile.dimensions
+        if dimension.key not in EVALUABLE_DIMENSIONS
+    ]
+    for candidate in candidates:
+        used = {item for result in candidate.dimensions for item in result.evidence_ids}
+        if any(
+            assertion.extraction_state == AssertionExtractionState.AUTO_VALIDATED
+            and any(evidence.fragment_id in used for evidence in assertion.evidence)
+            for assertion in assertions[candidate.breed]
+        ):
+            limitations.append("automatic_extraction_unreviewed")
+            break
+    return limitations
 
 
 def recommendation_narrator(

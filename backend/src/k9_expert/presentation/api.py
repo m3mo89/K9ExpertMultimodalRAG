@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
@@ -428,7 +429,21 @@ def breed_analysis_response(report: BreedAnalysisReport) -> BreedAnalysisRespons
 
 def create_app(container: ApplicationContainer | None = None) -> FastAPI:
     resolved = container or compose()
-    app = FastAPI(title="K9 Expert", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        resolved.system_state.record_process_presence("api", resolved.runtime_store.store_id)
+        print(
+            "K9_RUNTIME "
+            f"role=api store_id={resolved.runtime_store.store_id} "
+            f"data_dir={resolved.runtime_store.canonical_path} "
+            f"disposable={str(resolved.runtime_store.disposable).lower()}"
+        )
+        try:
+            yield
+        finally:
+            resolved.system_state.clear_process_presence("api")
+
+    app = FastAPI(title="K9 Expert", version="0.1.0", lifespan=lifespan)
     require_admin = admin_guard(resolved)
 
     @app.exception_handler(HTTPException)

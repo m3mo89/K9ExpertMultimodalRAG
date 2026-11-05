@@ -27,8 +27,18 @@ def run(
 
 def main() -> None:
     container = compose()
-    print(f"K9 Expert worker ready (concurrency={container.settings.worker_concurrency}).")
-    run(container)
+    store = container.runtime_store
+    container.system_state.record_process_presence("worker", store.store_id)
+    print(
+        "K9_RUNTIME "
+        f"role=worker store_id={store.store_id} data_dir={store.canonical_path} "
+        f"disposable={str(store.disposable).lower()} "
+        f"concurrency={container.settings.worker_concurrency}"
+    )
+    try:
+        run(container)
+    finally:
+        container.system_state.clear_process_presence("worker")
 
 
 if __name__ == "__main__":

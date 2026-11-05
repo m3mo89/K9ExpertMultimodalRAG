@@ -7,6 +7,7 @@ import type {
   ProfileDimension,
 } from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
+import { dimensionLabels } from '../../labels'
 import { RecommendationResults } from './RecommendationResults'
 
 interface Step {
@@ -40,20 +41,6 @@ const STEPS: Step[] = [
     options: [
       ['monte_denso', 'Monte denso'], ['bosque', 'Bosque'], ['campo_abierto', 'Campo abierto'],
       ['montana', 'Montaña'], ['accidentado', 'Terreno accidentado'], ['humedal', 'Humedales'],
-    ].map(([value, label]) => ({ value, label })),
-  },
-  {
-    key: 'experience', question: '¿Qué experiencia tiene con perros de trabajo?', multiple: false,
-    options: [
-      ['principiante', 'Principiante'], ['intermedia', 'Intermedia'], ['avanzada', 'Avanzada'],
-    ].map(([value, label]) => ({ value, label })),
-  },
-  {
-    key: 'daily_availability',
-    question: '¿Cuánto tiempo diario puede dedicar a ejercicio y entrenamiento?', multiple: false,
-    options: [
-      ['menos_1h', 'Menos de una hora'], ['1_2h', 'Entre una y dos horas'],
-      ['mas_2h', 'Más de dos horas'],
     ].map(([value, label]) => ({ value, label })),
   },
 ]
@@ -126,11 +113,11 @@ export function GuidedBreedMatch() {
     <section className="guided-match" aria-labelledby="guided-heading">
       <header className="page-header">
         <h1 id="guided-heading">Encuentra tu perro de caza ideal</h1>
-        <p className="muted">Responde cinco preguntas. Separaremos compatibilidad y evidencia disponible.</p>
+        <p className="muted">Responde tres preguntas. Separaremos compatibilidad y evidencia disponible.</p>
       </header>
       <div className="card guided-card">
-        <p className="small" aria-live="polite">Paso {Math.min(step + 1, 5)} de 5</p>
-        <progress value={Math.min(step + 1, 5)} max={5} aria-label="Progreso del perfil" />
+        <p className="small" aria-live="polite">Paso {Math.min(step + 1, STEPS.length)} de {STEPS.length}</p>
+        <progress value={Math.min(step + 1, STEPS.length)} max={STEPS.length} aria-label="Progreso del perfil" />
         {!summary && current && (
           <fieldset className="choice-group">
             <legend className="section-label">{current.question}</legend>
@@ -151,7 +138,7 @@ export function GuidedBreedMatch() {
               <button
                 type="button" className="button-primary"
                 disabled={pending || !(answers[current.key]?.length)} onClick={next}
-              >{step === 4 ? 'Revisar perfil' : 'Continuar'}</button>
+              >{step === STEPS.length - 1 ? 'Revisar perfil' : 'Continuar'}</button>
             </div>
           </fieldset>
         )}
@@ -169,9 +156,9 @@ export function GuidedBreedMatch() {
                 </div>
               ))}
             </dl>
-            <details><summary>Interpretación normalizada</summary><ul>{dimensions.map((item) => <li key={item.key}>{item.key}: {item.values.join(', ')}</li>)}</ul></details>
+            <details><summary>Interpretación normalizada</summary><ul>{dimensions.map((item) => <li key={item.key}>{dimensionLabels[item.key] ?? item.key}: {item.values.map((value) => labelFor(item.key, value)).join(', ')}</li>)}</ul></details>
             <div className="button-row">
-              <button type="button" className="button-secondary" onClick={() => setStep(4)}>Atrás</button>
+              <button type="button" className="button-secondary" onClick={() => setStep(STEPS.length - 1)}>Atrás</button>
               <button type="submit" className="button-primary" disabled={pending}>{pending ? 'Buscando…' : 'Ver recomendaciones'}</button>
             </div>
           </form>

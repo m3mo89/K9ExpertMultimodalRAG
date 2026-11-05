@@ -202,6 +202,13 @@ export type ComponentState = 'ok' | 'degraded' | 'unavailable'
 export interface HealthReport {
   status: ComponentState
   checked_at: string
+  runtime_store: {
+    store_id: string
+    canonical_path: string
+    path_fingerprint: string
+    disposable: boolean
+    worker_alignment: 'aligned' | 'missing' | 'stale'
+  }
   components: Record<string, { status: ComponentState; detail: string }>
 }
 

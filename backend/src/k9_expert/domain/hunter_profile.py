@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 PROFILE_SCHEMA_VERSION = "2.0"
-PROFILE_TRANSLATOR_VERSION = "hunter-profile-v1"
+PROFILE_TRANSLATOR_VERSION = "hunter-profile-v2"
+# Dimensions the corpus can document; other answers are accepted but never scored.
+EVALUABLE_DIMENSIONS = frozenset({"prey", "modality", "terrain"})
+ANY_PREY = "varias_especies"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,11 +47,11 @@ FIELDS = (
     ),
     ProfileField(
         "experience", "¿Qué experiencia tiene con perros de trabajo?",
-        ("principiante", "intermedia", "avanzada"), True, False, {},
+        ("principiante", "intermedia", "avanzada"), False, False, {},
     ),
     ProfileField(
         "daily_availability", "¿Cuánto tiempo diario puede dedicar a ejercicio y entrenamiento?",
-        ("menos_1h", "1_2h", "mas_2h"), True, False, {},
+        ("menos_1h", "1_2h", "mas_2h"), False, False, {},
     ),
     ProfileField(
         "hunting_frequency", "¿Con qué frecuencia caza?",

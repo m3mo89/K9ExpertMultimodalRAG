@@ -92,6 +92,7 @@ class AssertionEvidenceState(StrEnum):
 class AssertionExtractionState(StrEnum):
     CANDIDATE = "candidate"
     QUARANTINED = "quarantined"
+    AUTO_VALIDATED = "auto_validated"
     REVIEWED = "reviewed"
 
 
@@ -210,7 +211,7 @@ class TranslatedHunterProfile:
     constraints: tuple[ProfileConstraint, ...]
     completeness: ProfileCompleteness
     missing_fields: tuple[str, ...] = ()
-    translator_version: str = "hunter-profile-v1"
+    translator_version: str = "hunter-profile-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +232,7 @@ class RecommendationCandidate:
     dimensions: tuple[RecommendationDimensionResult, ...]
     penalties: tuple[str, ...] = ()
     excluded: bool = False
+    supporting_fragments: int = 0
 
 
 @dataclass(frozen=True, slots=True)

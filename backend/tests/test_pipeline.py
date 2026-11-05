@@ -9,8 +9,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import fitz
+import pytest
 from fastapi.testclient import TestClient
 
+from k9_expert.application import ingestion
 from k9_expert.application.composition import (
     ApplicationContainer,
     ApplicationSettings,
@@ -19,6 +21,7 @@ from k9_expert.application.composition import (
 from k9_expert.application.generation import GeneratedAnswer
 from k9_expert.application.maintenance import ComponentHealth
 from k9_expert.application.query import EvidenceSufficiencyPolicy
+from k9_expert.domain.breed_vocabulary import BreedClassification
 from k9_expert.domain.errors import ModelUnavailableError
 from k9_expert.presentation.api import create_app
 
@@ -239,3 +242,33 @@ def test_deactivation_deletion_history_and_rollback(tmp_path: Path) -> None:
     assert version[0]["id"] == teckel["version_id"]
     refused = client.post(f"/api/v1/admin/snapshots/{with_teckel}/rollback", headers=ADMIN)
     assert refused.status_code == 409
+
+
+def test_ingested_rule_assertions_recommend_without_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    labelled = BreedClassification(breed="Beagle", hunting_functions=("rastro",))
+    monkeypatch.setattr(ingestion, "classify", lambda _path, _discovered: labelled)
+    monkeypatch.setattr(ingestion, "validate_classification", lambda *_args: None)
+    container, client, _embedder = setup(tmp_path)
+    # No body wording for the modality, so only the breed-group signal can document it.
+    text = "El beagle es un sabueso pequeño. Caza la liebre y el conejo en jauría."
+    upload(client, "Beagle", pdf(tmp_path / "b.pdf", text))
+    drain(container)
+    assert not container.structured_knowledge.candidates("candidate")
+    response = client.post("/api/v2/recommendations", json={
+        "candidate_breeds": ["Beagle"],
+        "answers": [
+            {"key": "prey", "values": ["liebre"]},
+            {"key": "modality", "values": ["rastreo"]},
+            {"key": "terrain", "values": ["bosque"]},
+        ],
+    }).json()
+    assert response["status"] == "completed"
+    [candidate] = response["candidates"]
+    assert candidate["breed"] == "Beagle"
+    assert candidate["coverage"] > 0.7
+    assert "automatic_extraction_unreviewed" in response["limitations"]
+    published = container.structured_knowledge.candidates()
+    methods = {str(item["extraction_method"]) for item in published}
+    assert methods == {"assertion-rules-v2", "assertion-rules-v2:group"}

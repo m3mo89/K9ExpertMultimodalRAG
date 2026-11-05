@@ -17,7 +17,7 @@ class StructuredBreedProfileService:
         self.repository = repository
 
     def profile(self, snapshot_id: str, breed: str) -> StructuredBreedProfile:
-        assertions = self.repository.approved(snapshot_id, breed)
+        assertions = self.repository.eligible(snapshot_id, breed)
         by_attribute: dict[str, list[BreedAssertion]] = defaultdict(list)
         for assertion in assertions:
             by_attribute[assertion.attribute_key].append(assertion)
@@ -32,7 +32,7 @@ class StructuredBreedProfileService:
             attributes.append(BreedAttributeProfile(
                 key, tuple(values), "conflicting" if conflicting else "documented"
             ))
-        policy = assertions[0].policy_version if assertions else "structured-knowledge-v1"
+        policy = assertions[0].policy_version if assertions else "structured-knowledge-v2"
         return StructuredBreedProfile(
             breed, SnapshotId(UUID(snapshot_id)), tuple(attributes), policy
         )

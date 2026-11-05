@@ -49,9 +49,9 @@ describe('RecommendationResults', () => {
   it('shows bands, unknowns, conflicts, penalties, sources and fewer-than-three reason', async () => {
     renderWithApi(<RecommendationResults result={result} />, setup().client)
     expect(screen.getByText('Alta')).toBeInTheDocument()
-    expect(screen.getByText((_text, node) => node?.textContent === 'modality: Evidencia contradictoria')).toBeInTheDocument()
-    expect(screen.getByText((_text, node) => node?.textContent === 'terrain: No documentado')).toBeInTheDocument()
-    expect(screen.getByText(/documented_incompatibility:terrain/)).toBeInTheDocument()
+    expect(screen.getByText((_text, node) => node?.textContent === 'Trabajo del perro: Evidencia contradictoria')).toBeInTheDocument()
+    expect(screen.getByText((_text, node) => node?.textContent === 'Terreno: No documentado')).toBeInTheDocument()
+    expect(screen.getByText(/documenta una incompatibilidad en: Terreno/)).toBeInTheDocument()
     expect(await screen.findByText(/pág. 12/)).toBeInTheDocument()
     expect(screen.getByText(/menos de tres razas/)).toBeInTheDocument()
   })
@@ -61,6 +61,50 @@ describe('RecommendationResults', () => {
     expect(screen.getByText(/no cuenta a favor ni en contra/)).toBeInTheDocument()
   })
 
+  it('discloses automatic extraction and translates limitation codes', () => {
+    renderWithApi(<RecommendationResults result={{
+      ...result,
+      limitations: ['automatic_extraction_unreviewed', 'dimension_not_evaluated:experience', 'narrative_unavailable', 'fewer_supported_candidates'],
+    }} />, setup().client)
+    expect(screen.getByText(/ninguna persona la revisó/)).toBeInTheDocument()
+    expect(screen.getByText(/Experiencia del propietario: las fuentes no permiten evaluarlo/)).toBeInTheDocument()
+    expect(screen.getByText(/No se generó la síntesis narrativa/)).toBeInTheDocument()
+    const region = screen.getByRole('region', { name: 'Recomendaciones' })
+    expect(region).not.toHaveTextContent(/automatic_extraction|dimension_not_evaluated|narrative_unavailable|fewer_supported/)
+  })
+
+  it('explains an abstention in plain language', () => {
+    renderWithApi(<RecommendationResults result={{
+      ...result, status: 'abstained', candidates: [], limitations: ['no_candidate_reached_coverage'],
+    }} />, setup().client)
+    expect(screen.getByText(/no documentan lo suficiente/)).toBeInTheDocument()
+    expect(screen.queryByText(/menos de tres razas/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no_candidate_reached_coverage/)).not.toBeInTheDocument()
+  })
+
+  it('cites only the evidence behind each dimension, once', async () => {
+    const api = fakeApi({
+      'GET /api/v2/breeds/Raza%20A/structured-profile': {
+        breed: 'Raza A', snapshot_id: result.snapshot_id, policy_version: 'v1',
+        attributes: [{
+          key: 'modality', evidence_state: 'documented',
+          assertions: ['rastreo', 'cobro'].map((value) => ({
+            id: value, value, polarity: 'supports', evidence: [
+              { fragment_id: 'f1', title: 'Enciclopedia', physical_page: 12 },
+              { fragment_id: 'other', title: 'Enciclopedia', physical_page: 99 },
+            ],
+          })),
+        }],
+      },
+      'GET /api/v2/breeds/Raza%20B/structured-profile': {
+        breed: 'Raza B', snapshot_id: result.snapshot_id, policy_version: 'v1', attributes: [],
+      },
+    })
+    renderWithApi(<RecommendationResults result={result} />, api.client)
+    expect(await screen.findAllByText(/pág. 12/)).toHaveLength(1)
+    expect(screen.queryByText(/pág. 99/)).not.toBeInTheDocument()
+  })
+
   it('compares two breeds in an accessible table', async () => {
     renderWithApi(<RecommendationResults result={result} />, setup().client)
     const user = userEvent.setup()
@@ -68,7 +112,7 @@ describe('RecommendationResults', () => {
     await user.click(screen.getByLabelText('Comparar Raza B'))
     const region = screen.getByRole('region', { name: 'Comparador de recomendaciones' })
     const table = within(region).getByRole('table', { name: 'Comparación de 2 razas' })
-    expect(within(table).getByRole('row', { name: /modality/ })).toHaveTextContent('Coincide')
+    expect(within(table).getByRole('row', { name: /Trabajo del perro/ })).toHaveTextContent('Coincide')
     expect(within(table).getByRole('row', { name: /Cobertura/ })).toHaveTextContent('80 %')
   })
 })
