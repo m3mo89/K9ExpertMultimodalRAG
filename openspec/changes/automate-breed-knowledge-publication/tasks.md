@@ -48,5 +48,5 @@
 
 - [x] 7.1 Run the backend and frontend test suites, type checks and linters
 - [x] 7.2 Reset a store, ingest the encyclopedia, and confirm that `snapshot_assertions` is populated without reviews
-- [ ] 7.3 Run the guided flow in the app for at least five profiles and confirm cited results or a plain abstention, recording the counts
+- [x] 7.3 Run the guided flow in the app for at least five profiles and confirm cited results or a plain abstention, recording the counts (see "Ejecución de puertas (2026-11-04)" in `docs/evaluation/recommendation-acceptance-gates-v1.md`)
 - [x] 7.4 Export a 50-row sample and report the Beagle over-representation check, leaving labeling to the project author

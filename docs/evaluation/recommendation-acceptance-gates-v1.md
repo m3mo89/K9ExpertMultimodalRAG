@@ -32,7 +32,26 @@ RSS pico del proceso de medición: 136 MB. G7 se cumple. La narrativa con Ollama
 
 ## Estado actual
 
-G1–G4, G6, G7 y G8 se cumplen. **G5 y G9 no se cumplen**: el conjunto de evaluación no tiene juicios de especialistas y, con el corpus actual, el extractor solo documenta `modality` y `terrain` (peso 0.55 de 1.20), por lo que la cobertura máxima posible (0.46) queda por debajo de `minimum_coverage = 0.5` y toda recomendación se abstiene. El flujo guiado no debe activarse por defecto hasta resolverlo.
+G1–G4, G6, G7 y G8 se cumplen. **G9 se cierra por decisión del autor del proyecto (2026-11-04), con una desviación de su criterio**: el corpus de referencia produce resultados, pero con afirmaciones publicadas automáticamente y no aprobadas por especialistas, y sobre perfiles ejecutados en la aplicación, no sobre el conjunto de evaluación (ver «Ejecución de puertas (2026-11-04)»). Esto demuestra que hay resultados, no que sean correctos. **G5 no se cumple**: el conjunto de evaluación no tiene juicios de especialistas.
+
+## Ejecución de puertas (2026-11-04)
+
+Tras `automate-breed-knowledge-publication`, con la política `recommendation-v3`. Corpus ingerido en un directorio temporal; seis perfiles recorridos en el navegador, en la interfaz real contra la API real, en un Apple M3 Pro de 18 GB.
+
+| Perfil (presa / trabajo / terreno) | Estado | Razas | Citas en pantalla | Aspectos «No documentado» |
+|---|---|---|---|---|
+| Venado / Seguir un rastro / Monte denso | `completed` | 3 | 17 | 2 |
+| Aves / Señalar la pieza / Campo abierto | `completed` | 3 | 19 | 1 |
+| Aves / Cobrar / Humedales | `completed` | 3 | 18 | 0 |
+| Jabalí / Levantar piezas / Montaña | `completed` | 3 | 12 | 3 |
+| Conejo / Seguir un rastro / Terreno accidentado | `completed` | 3 | 10 | 3 |
+| Liebre / Trabajar en agua / Montaña | `completed` | 3 | 6 | 3 |
+
+Los seis muestran el aviso de extracción automática y ninguno produjo una abstención. No se comprobó que las razas sean adecuadas ni que cada página citada respalde la afirmación.
+
+| Puerta | Resultado | Evidencia |
+|---|---|---|
+| Utilidad con el corpus real (G9) | **Cerrada por decisión del autor**, con la desviación indicada en «Estado actual» | Tabla anterior |
 
 ## Ejecución de puertas (2026-11-03)
 
@@ -44,11 +63,11 @@ G1–G4, G6, G7 y G8 se cumplen. **G5 y G9 no se cumplen**: el conjunto de evalu
 | Conjunto experto `k9-recommendation-v1` | **No evaluable**: 1 caso (abstención correcta, campos faltantes correctos), 0 juicios de especialistas | `evaluation/datasets/k9-recommendation-v1.json` |
 | Utilidad con el corpus real (G9) | **Falla**: con todas las candidatas aprobadas, todas las razas se abstienen | Línea base anterior |
 
-### Limitaciones vigentes
+## Limitaciones vigentes
 
 - No hay afirmaciones revisadas por especialistas ni juicios expertos; el conjunto de evaluación solo cubre un caso de abstención.
-- El extractor por reglas solo documenta `modality` y `terrain`; `prey`, `experience` y `daily_availability` quedan siempre desconocidos, lo que limita la cobertura a 0.46.
-- «muestra» también es un verbo en español: 218 de 391 candidatas son `modality=muestra` y muchas serán falsos positivos que la revisión debe rechazar.
-- Los pesos 30/25/20/15/10 y el umbral de cobertura son configuración de diseño sin calibración experta.
+- `experience` y `daily_availability` no se evalúan, porque el corpus no permite documentarlas.
+- La precisión del extractor por reglas no está medida: no hay ninguna muestra etiquetada en el repositorio. Las afirmaciones erróneas pueden influir en los resultados.
+- Los pesos y el umbral de cobertura son configuración de diseño sin calibración experta.
 
-Con G5 y G9 sin cumplir, el flujo guiado no satisface las condiciones para ser el predeterminado.
+Con G5 sin cumplir, el flujo guiado es el predeterminado sin validación de especialistas; los resultados lo advierten y citan la página para que se pueda comprobar.
