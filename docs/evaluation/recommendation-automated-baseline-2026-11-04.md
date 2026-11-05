@@ -1,5 +1,11 @@
 # Baseline automatizado de recomendación — 2026-11-04
 
+> **Nota posterior.** Este registro es anterior a `automate-breed-knowledge-publication`. Desde ese
+> cambio, las afirmaciones extraídas por reglas que superan la validación se publican sin revisión
+> humana; lo extraído por el modelo sigue sin publicarse sin aprobación explícita, que es lo que
+> cubre la fila «Ingesta adversarial». Los conteos de pruebas corresponden a la fecha de este
+> registro y no se han actualizado. La limitación de liberación sigue vigente.
+
 ## Gates ejecutados
 
 | Gate | Resultado |

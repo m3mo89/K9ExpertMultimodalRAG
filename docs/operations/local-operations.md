@@ -5,7 +5,7 @@ Guía para instalar, configurar y operar K9 Expert en una Mac con Apple Silicon 
 ## 1. Requisitos
 
 - macOS en Apple Silicon. Probado en un M3 Pro de 18 GB; la huella medida es de ~4 GB (`docs/evaluation/baseline-2026-11-01.md`).
-- Python 3.13, Node.js 20 o superior y [Ollama](https://ollama.com).
+- Python 3.13, Node.js 22 (≥ 22.13) o 24 y [Ollama](https://ollama.com).
 - Opcional: Tesseract con datos de español (`brew install tesseract tesseract-lang`). Sin él, las páginas que requieren OCR conservan su texto directo y quedan marcadas como `ocr_unavailable`.
 
 ## 2. Instalación
