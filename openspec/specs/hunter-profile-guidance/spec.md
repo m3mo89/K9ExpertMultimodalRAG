@@ -6,15 +6,19 @@ TBD - created by syncing change redesign-breedmatch-decision-support. Update Pur
 ## Requirements
 
 ### Requirement: Progressive hunter profile
-The system SHALL provide a progressive guided flow that captures prey, expected hunting work, primary terrain, owner experience, and daily exercise or training availability in plain language, while permitting conditional and optional answers for climate, water, space, hunting frequency, care preferences, and candidate breeds.
+The system SHALL provide a progressive guided flow that captures prey, expected hunting work and primary terrain in plain language, and SHALL ask only for answers that the active recommendation policy can evaluate. The API SHALL continue to accept owner experience, daily availability, climate, space, hunting frequency, care preferences and candidate breeds as optional answers.
 
 #### Scenario: Complete minimum profile
-- **WHEN** a user answers every decision-critical question
+- **WHEN** a user answers prey, expected work and terrain
 - **THEN** the system presents an editable summary containing the original answers and the normalized recommendation dimensions before analysis
 
 #### Scenario: Navigate the flow
 - **WHEN** a user moves backward and forward between steps
 - **THEN** previously entered answers remain available and validation does not discard them
+
+#### Scenario: User chooses several species
+- **WHEN** a user selects `varias_especies`
+- **THEN** the translator keeps the original answer and evaluates every concrete supported prey value for that dimension
 
 ### Requirement: Contextual terminology help
 The guided flow SHALL explain specialist hunting terms at the point of use without requiring the user to leave the flow, and SHALL remain keyboard-operable, screen-reader compatible and responsive.
@@ -30,9 +34,9 @@ The system SHALL identify missing or ambiguous answers that prevent a determinis
 - **WHEN** a user selects a prey and terrain but has not stated what work the dog must perform
 - **THEN** the system requests the expected work and does not produce a ranked recommendation
 
-#### Scenario: Hunting frequency is known but daily availability is unknown
-- **WHEN** a user states that hunting is occasional but omits daily exercise or training availability
-- **THEN** the system treats daily availability as unknown and asks for it rather than inferring it from hunting frequency
+#### Scenario: Optional owner answers are omitted
+- **WHEN** a user answers prey, expected work and terrain but omits owner experience and daily availability
+- **THEN** the profile is complete and the system does not infer the omitted values
 
 ### Requirement: Advanced analysis remains available
 The system SHALL retain the current criteria-based documentary analysis as an explicitly labeled advanced path and SHALL preserve the user's ability to name candidate breeds.
