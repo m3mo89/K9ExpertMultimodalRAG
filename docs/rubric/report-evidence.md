@@ -10,7 +10,7 @@ Correspondencia entre cada apartado de la sección 11.1 del enunciado y la evide
 | 4 | Requisitos y atributos de calidad medibles | `docs/evaluation/acceptance-gates-v1.md` (G1–G18) | — |
 | 5 | Arquitectura (vistas estructurales) | `docs/architecture/diagrams.md`, diagramas 1–5 | Exportar a imagen |
 | 6 | Comportamiento (secuencias) | `docs/architecture/diagrams.md`, diagramas 6–10 | Exportar a imagen |
-| 7 | Selección de modelos y enrutamiento | `docs/evaluation/model-selection-2026-11-02.md`; ADR-02, ADR-07, ADR-08; ejecuciones E2 `7e3065` y `60bc77` | Segundo modelo de embeddings; puntuación humana de calidad (0–5) |
+| 7 | Selección de modelos y enrutamiento | `docs/evaluation/model-selection-2026-11-02.md`; ADR-02, ADR-07, ADR-08; LLM E2 `7e3065` y `60bc77`; embeddings Nomic `7e3065` y BGE-M3 `aad176` | Puntuación humana de calidad (0–5) |
 | 8 | Diseño de cada capa | ADR-01, ADR-03, ADR-04, ADR-05, ADR-06, ADR-09; `docs/rubric/traceability.md` | — |
 | 9 | ADR (≥ 6) | `docs/adr/` (9 ADR; 2 provisionales) | — |
 | 10 | Evaluación y análisis de errores | `evaluation/runs/` (E1 `c29f7a`, E2 `7e3065` y `60bc77`, LAYERS `cb245f` → `3c58a6` → `ad5f2f` → `6fd1ec`, CALIBRATION `bb4123`); sección «Defectos encontrados» de `model-selection-2026-11-02.md` | Revisión humana. Sin RAG (E1 `20261102T050424Z-E1-341935`, llama3.2:3b): sin citas, abstención correcta 0.5, falsas abstenciones 0.6; con RAG (E2 `7e3065`): 1.0 y 0.2 |

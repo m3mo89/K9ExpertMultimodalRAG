@@ -1,6 +1,6 @@
 # Matriz de trazabilidad — rúbrica del proyecto integrador
 
-Estado al 2026-11-02. Regla: un requisito sólo figura como **Cumple** si enlaza evidencia que supera sus puertas (`docs/evaluation/acceptance-gates-v1.md`). Estados posibles: **Cumple**, **Parcial** (implementado, con brecha medida o revisión pendiente) y **Pendiente**.
+Estado al 2026-11-06. Regla: un requisito sólo figura como **Cumple** si enlaza evidencia que supera sus puertas (`docs/evaluation/acceptance-gates-v1.md`). Estados posibles: **Cumple**, **Parcial** (implementado, con brecha medida o revisión pendiente) y **Pendiente**.
 
 ## Requisitos R1–R12
 
@@ -8,7 +8,7 @@ Estado al 2026-11-02. Regla: un requisito sólo figura como **Cumple** si enlaza
 |---|---|---|---|---|
 | R1 (*) | Dominio y corpus propio (≥ 50 páginas) | Perros de caza; enciclopedia de 243 páginas (`README.md`, sección Corpus) | `evaluation/datasets/k9-reference-v2.json` (SHA-256 del PDF); registro de ingesta en `docs/evaluation/model-selection-2026-11-02.md` | Cumple. La licencia del PDF impide redistribuirlo; se documenta cómo adquirirlo |
 | R2 (*) | Ejecución local sin APIs en la nube | Ollama en loopback; `RoutedOllamaGateway` sin rutas externas | `backend/tests/test_routing.py::test_gateway_never_falls_back_to_an_unconfigured_external_alias`; `frontend/e2e/api-boundary.spec.ts`; `scripts/preflight.py` | Parcial: falta el ensayo sin conexión en la Mac de entrega (9.6) |
-| R3 (*) | ≥ 2 LLM y ≥ 2 modelos de embeddings comparados | `python -m k9_expert.evaluation run --text-model …` y `--embedding-model …` | LLM: `evaluation/runs/20261102T045033Z-E2-7e3065.json`, `…045419Z-E2-60bc77.json`; ADR-07, ADR-08 | **Parcial**: 2 LLM medidos (ninguno supera G1); sólo 1 modelo de embeddings medido |
+| R3 (*) | ≥ 2 LLM y ≥ 2 modelos de embeddings comparados | `python -m k9_expert.evaluation run --text-model …` y `--embedding-model …` | LLM: `evaluation/runs/20261102T045033Z-E2-7e3065.json`, `…045419Z-E2-60bc77.json`; embeddings: Nomic `…045033Z-E2-7e3065.json`, BGE-M3 `evaluation/runs/20261107T033817Z-E2-aad176.json`; ADR-07, ADR-08 | **Parcial**: 2 LLM y 2 embeddings medidos; ambos embeddings superan G2–G4, pero ningún LLM supera G1 y falta la revisión humana |
 | R4 (*) | Embeddings en base vectorial | `IngestionWorker`, `SnapshotIndexBuilder`, `ChromaGenerationIndex` | `backend/tests/test_vector_index.py`, `test_pipeline.py`; 786 vectores en staging | Cumple |
 | R5 (*) | RAG con fuentes | `SnapshotRetriever`, `PromptBuilder`, `verify_answer`; citas por página en BreedMatch | E2: Recall@5 0.925, Hit@5 0.95; BreedMatch: páginas citadas en las esperadas 0.93 | **Parcial**: precisión de cita del chat 0.63–0.71 < 0.80 (G1) |
 | R6 (*) | Arquitectura en capas con C1–C7, T1, T2 | Ver tabla de capas | `docs/architecture/diagrams.md` (diagramas 3 y 4); `backend/tests/test_architecture.py` | Cumple |
@@ -36,7 +36,6 @@ Estado al 2026-11-02. Regla: un requisito sólo figura como **Cumple** si enlaza
 ## Brechas que impiden declarar cumplimiento total
 
 1. G1, precisión de cita del chat (R3, R5): no superada por ningún modelo.
-2. Segundo modelo de embeddings sin medir (R3): no está descargado y quedan 3.6 GB libres en el equipo de trabajo.
-3. Revisión humana pendiente: hojas `*.review.csv` y firma de los datasets (8.5).
-4. Ensayo completo sin conexión en la Mac de entrega (9.6).
-5. Informe técnico en PDF (R11).
+2. Revisión humana pendiente: hojas `*.review.csv` y firma de los datasets (8.5).
+3. Ensayo completo sin conexión en la Mac de entrega (9.6).
+4. Informe técnico en PDF (R11).

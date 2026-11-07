@@ -44,7 +44,24 @@ Recuperación idéntica en ambos (mismo índice). Cada modelo agotó una vez el 
 
 ## 8.3 Modelos de embeddings
 
-Sólo `nomic-embed-text:latest` está medido sobre el corpus completo (Recall@5 0.925, Hit@5 0.95, MRR 0.808). **El segundo modelo no se ha medido**: no está descargado y el equipo de trabajo tiene 3.6 GB libres. El procedimiento está preparado: `scripts/stage_reference_corpus.py --embedding-model … --query-prefix … --document-prefix …` construye una generación aislada en otro directorio de datos, y `python -m k9_expert.evaluation run --experiment E2 --embedding-model …` la evalúa sin mezclar vectores. R3 no se cumple hasta completar esta comparación.
+Comparación completada el 2026-11-06 sobre el mismo dataset `k9-reference` 2.0.0, el mismo corpus y los mismos parámetros de recuperación. Cada candidato usó una generación de índice aislada.
+
+| Criterio | `nomic-embed-text:latest` | `bge-m3:latest` |
+|---|---:|---:|
+| Parámetros | 137 M | 566.7 M |
+| Dimensiones | 768 | 1024 |
+| Licencia | Apache 2.0 | MIT |
+| Tamaño local | 274 MB | 1.2 GB |
+| Recall@1 | 0.575 | **0.625** |
+| Recall@3 | **0.925** | 0.900 |
+| Recall@5 (G2 ≥ 0.75) | 0.925 ✔ | 0.925 ✔ |
+| Hit@5 (G3 ≥ 0.85) | 0.950 ✔ | 0.950 ✔ |
+| MRR (G4 ≥ 0.60) | 0.808 ✔ | **0.825 ✔** |
+| Tiempo de embeddings del corpus | **16.1 s** | 34.4 s |
+
+Evidencia: Nomic `20261102T045033Z-E2-7e3065`; BGE-M3 `20261107T033817Z-E2-aad176`. BGE-M3 recupera ligeramente mejor en la primera posición, pero no mejora Recall@5 ni Hit@5, reduce Recall@3, tarda aproximadamente 2.1 veces más y ocupa 4.4 veces más. Se conserva Nomic como modelo activo por su mejor compromiso entre calidad y recursos.
+
+La corrida E2 de BGE-M3 abstuvo los casos positivos porque heredó el umbral de suficiencia 0.68 calibrado para Nomic. Esto no afecta las métricas de recuperación, que se calculan antes de generar. La calibración `20261107T033904Z-CALIBRATION-b3dbb8` confirma que las escalas no son transferibles: los positivos BGE-M3 tuvieron puntuaciones top entre 0.475 y 0.676 y el conjunto de desarrollo no separó positivos de negativos. No se promueve BGE-M3 ni se modifica el umbral de producción.
 
 ## 8.4 Calibración de umbrales (`20261102T045930Z-CALIBRATION-bb4123`)
 
@@ -81,6 +98,5 @@ Las etiquetas y las puertas no se modificaron. Las ejecuciones previas a cada co
 ## Brechas abiertas
 
 - G1 (precisión de cita) no se cumple con ningún modelo: los requisitos que dependen de ella no se marcan como cumplidos.
-- Segundo modelo de embeddings sin medir (R3 incompleto).
 - Revisión humana de calidad, español y relevancia pendiente (8.5).
 - Reducción de latencia por caché sin medir en el dataset; sólo se observa en trazas.

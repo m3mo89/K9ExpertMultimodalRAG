@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 *.py[cod]
 data/
+data-*/
 .k9-quarantine/
 frontend/node_modules/
 frontend/dist/
