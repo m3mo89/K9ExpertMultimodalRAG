@@ -1,0 +1,26 @@
+sequenceDiagram
+  autonumber
+  participant Web as Aplicación web
+  participant API as C1 API
+  participant Or as C2 BreedAnalysisService
+  participant GR as C3 Guardarraíles
+  participant CA as C4 AnalysisResponseCache
+  participant EMB as C7 OllamaEmbedder
+  participant DB as C7 SQLite
+  Web->>API: POST /breed-analyses («trabajo de rastro»)
+  API->>Or: analyze(profile)
+  Or->>GR: entrada
+  GR-->>Or: allow
+  Or->>CA: get(profile, snapshot)
+  CA->>DB: búsqueda exacta (clave canónica)
+  DB-->>CA: sin entrada
+  CA->>EMB: embed(texto de criterios)
+  CA->>DB: candidatos de la misma partición y snapshot, no expirados
+  DB-->>CA: mejor coseno ≥ umbral
+  CA->>CA: comprobar funciones controladas idénticas
+  CA-->>Or: semantic hit (analysis_id, similitud)
+  Or->>DB: cargar informe de origen
+  Or->>GR: revalidar salida del informe en caché
+  GR-->>Or: allow
+  Or->>DB: guardar nuevo análisis (cache_hit=semantic)
+  API-->>Web: informe + similitud, sin recuperación ni generación

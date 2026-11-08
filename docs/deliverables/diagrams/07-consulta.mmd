@@ -1,0 +1,44 @@
+sequenceDiagram
+  autonumber
+  actor U as Usuario
+  participant Web as Aplicación web
+  participant API as C1 API
+  participant Or as C2 BreedAnalysisService
+  participant GR as C3 Guardarraíles
+  participant CA as C4 AnalysisResponseCache
+  participant CTX as C5 Retriever + Matcher
+  participant RT as C6 ComplexityRouter
+  participant GW as C6 RoutedOllamaGateway
+  participant OL as C7 Ollama
+  participant DB as C7 SQLite
+  participant T1 as T1 TraceRecorder
+  U->>Web: Criterios (función, manto, tamaño…) y razas
+  Web->>API: POST /api/v1/breed-analyses
+  API->>Or: analyze(profile)
+  Or->>T1: nueva traza
+  Or->>GR: InputGuardrailChain.evaluate
+  GR-->>Or: allow
+  Or->>CA: get(profile, snapshot)
+  CA-->>Or: miss
+  loop por raza y criterio (filtros inmutables)
+    Or->>CTX: retrieve(raza: criterio)
+    CTX-->>Or: evidencia con página
+  end
+  Or->>Or: EvidenceSufficiencyPolicy → suficiente
+  Or->>CTX: DeterministicBreedMatcher.match
+  CTX-->>Or: hallazgos match/mismatch/not_documented y puntuaciones
+  Or->>RT: route(candidatos, criterios, evidencia, reformulado)
+  RT-->>Or: simple | complex + motivo
+  Or->>GR: OutputGuardrailChain (esquema, razas, citas)
+  GR-->>Or: allow
+  Or->>GW: generate(alias, hallazgos + evidencia)
+  GW->>OL: /api/chat (format=json, think=false, timeout)
+  OL-->>GW: síntesis + evidence_ids
+  GW-->>Or: borrador (o respaldo local)
+  Or->>Or: verificar ids citados ⊆ evidencia
+  Or->>DB: guardar informe, hallazgos y citas
+  Or->>CA: store(profile → analysis_id)
+  Or->>T1: finish (etapas, guardarraíles, caché, ruta, modelo)
+  API-->>Web: informe + execution + trace_id
+  U->>Web: Útil / No útil
+  Web->>API: POST /breed-analyses/{id}/feedback (T2)

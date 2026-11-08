@@ -1,0 +1,40 @@
+flowchart LR
+  subgraph C1["C1 API"]
+    routes["create_app()<br/>POST /breed-analyses · POST /queries · GET /configuration · /admin/metrics"]
+  end
+  subgraph C2["C2 Orquestación"]
+    bas["BreedAnalysisService.analyze()"]
+    qo["QueryOrchestrator.run()"]
+    reform["DomainPreservingReformulator"]
+  end
+  subgraph C3["C3 Guardarraíles"]
+    ig["InputGuardrailChain"]
+    og["OutputGuardrailChain"]
+    va["verify_answer / safety_frame"]
+  end
+  subgraph C4["C4 Caché"]
+    ac["AnalysisResponseCache"]
+    qc["QueryResponseCache"]
+  end
+  subgraph C5["C5 Contexto"]
+    ret["SnapshotRetriever"]
+    sel["SemanticRetriever"]
+    suf["EvidenceSufficiencyPolicy"]
+    match["DeterministicBreedMatcher"]
+    pb["PromptBuilder / _narrative_prompt"]
+  end
+  subgraph C6["C6 Modelos"]
+    router["ComplexityRouter"]
+    gw["RoutedOllamaGateway"]
+  end
+  subgraph C7["C7 Adaptadores"]
+    ollama["OllamaTextGateway · OllamaEmbedder"]
+    chroma["ChromaGenerationIndex"]
+    repos["Document/Snapshot/BreedAnalysis/Trace Repositories · SqliteResponseCache"]
+  end
+  routes --> bas & qo
+  bas --> ig & og & ac & ret & suf & match & router & gw & reform
+  qo --> ig & va & qc & ret & suf & pb & router & gw & reform
+  ret --> sel & chroma
+  ac & qc --> repos
+  gw --> ollama

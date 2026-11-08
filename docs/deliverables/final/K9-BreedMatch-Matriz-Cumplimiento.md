@@ -39,7 +39,7 @@
 | B1 Idea, dominio y requisitos | Ficha, corpus, tabla de requisitos y escenarios | 2–4 | Cubierto | Reservas R1/R12 explícitas. |
 | B2 Vistas estructurales | Figuras 1–5 y análisis por vista | 5 | Cubierto | — |
 | B3 Secuencias | Figuras 6–10 y flujos/alternativas | 6 | Cubierto | — |
-| B4 ADR | Nueve ADR; estados y consecuencias | 9 | Cubierto | ADR-07 provisional; README de ADR-08 quedó desactualizado respecto del archivo y la corrida BGE-M3. |
+| B4 ADR | Nueve ADR; estados y consecuencias | 9 | Cubierto | ADR-07 permanece provisional porque ningún LLM supera G1. |
 | B5 Modelos/router | Dos LLM y dos embeddings, mismas preguntas/corpus | 7 | Cubierto con brecha | G1 y revisión humana pendientes. |
 | B6 Evaluación | Metodología, resultados, errores y validez | 10 | Cubierto con brecha | Métricas faltantes declaradas “no evaluadas”. |
 | B7 Redacción/formato/reproducibilidad | Word, PDF, Markdown, referencias, anexos y matriz | 1–12 | Cubierto | Índice automático debe actualizarse al abrir Word si la aplicación no lo recalcula. |

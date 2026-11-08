@@ -1,0 +1,17 @@
+flowchart TB
+  browser["Aplicación web<br/>[React + Vite]<br/>BreedMatch, chat, biblioteca, sistema"]
+  api["Servicio API<br/>[FastAPI, uvicorn]<br/>C1–C7, T1, T2"]
+  worker["Trabajador de ingesta<br/>[Python]<br/>Extracción, OCR, fragmentación, embeddings, publicación"]
+  ollama["Servidor de modelos<br/>[Ollama]<br/>llama3.2:3b, qwen3.5:2b, nomic-embed-text"]
+  chroma[("Base vectorial<br/>[Chroma persistente]<br/>Una colección por generación de índice")]
+  sqlite[("Almacén relacional<br/>[SQLite]<br/>Documentos, snapshots, cachés, trazas, feedback, análisis")]
+  files[("Almacén de archivos<br/>[Sistema de archivos]<br/>PDF gestionados y copias")]
+  browser -->|"HTTP JSON /api/v1 (proxy de Vite)"| api
+  api -->|"HTTP 127.0.0.1:11434"| ollama
+  worker -->|"HTTP 127.0.0.1:11434 /api/embed"| ollama
+  api --> chroma
+  api --> sqlite
+  worker --> chroma
+  worker --> sqlite
+  worker --> files
+  api --> files

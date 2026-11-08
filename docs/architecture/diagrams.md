@@ -301,7 +301,7 @@ sequenceDiagram
     Or->>GW: generar con la segunda evidencia (ruta complex · agent_reformulation)
   else sigue insuficiente en la iteración máxima
     SUF-->>Or: insuficiente
-    Or-->>Or: abstención sin generación; decisiones registradas en la traza
+    Or-->>Or: abstención sin generación y decisiones registradas en la traza
   end
 ```
 

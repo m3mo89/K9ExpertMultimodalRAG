@@ -1,0 +1,26 @@
+sequenceDiagram
+  autonumber
+  actor Admin
+  participant Web as Aplicación web
+  participant API as C1 API
+  participant Reg as DocumentRegistrationService
+  participant W as IngestionWorker
+  participant Emb as OllamaEmbedder (C7)
+  participant Idx as SnapshotIndexBuilder / Chroma
+  participant Snap as SnapshotRepository
+  participant Cache as CacheInvalidator
+  Admin->>Web: Sube PDF
+  Web->>API: POST /api/v1/documents (multipart, secreto admin)
+  API->>Reg: register(pdf)
+  Reg-->>API: document_id, version_id, job_id
+  API-->>Web: 201 Recibido
+  W->>W: extraer texto / OCR, fragmentar por página y sección
+  W->>W: clasificar raza, grupo, función, sección (vocabulario k9-reference-v1)
+  W->>Emb: embed_documents(fragmentos nuevos)
+  Emb-->>W: vectores 768d (caché de embeddings por contenido)
+  W->>Idx: construir generación candidata
+  Idx-->>W: conteo, dimensión, metadatos y prueba de humo válidos
+  W->>Snap: publish_version (atómico)
+  W->>Cache: invalidate_snapshot(anterior)
+  Web->>API: GET /api/v1/jobs/{id}
+  API-->>Web: etapa = available

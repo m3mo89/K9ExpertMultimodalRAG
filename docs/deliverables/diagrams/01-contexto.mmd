@@ -1,0 +1,8 @@
+flowchart LR
+  user["Cazador / criador<br/>[Persona]<br/>Compara razas por criterios de caza"]
+  admin["Administrador<br/>[Persona]<br/>Carga y publica documentos"]
+  k9["K9 Expert<br/>[Sistema]<br/>BreedMatch con citas, chat documental, biblioteca"]
+  registry["Registro de modelos de Ollama<br/>[Sistema externo]<br/>Sólo durante la instalación"]
+  user -->|"Criterios e informes (HTTP, LAN o loopback)"| k9
+  admin -->|"PDF, publicación, métricas"| k9
+  k9 -.->|"ollama pull (una vez, fuera de la demostración)"| registry

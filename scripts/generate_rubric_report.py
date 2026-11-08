@@ -16,10 +16,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "docs/deliverables/final/K9-BreedMatch-Informe-Tecnico-Rubrica.md"
-OUTPUT = ROOT / "docs/deliverables/final/K9-BreedMatch-Informe-Tecnico-Rubrica.docx"
+SOURCE = ROOT / "docs/deliverables/final/K9-BreedMatch-Informe-Tecnico.md"
+OUTPUT = ROOT / "docs/deliverables/final/K9-BreedMatch-Informe-Tecnico.docx"
 NAVY = "17324D"
 BLUE = "1E6A78"
 
@@ -165,7 +166,11 @@ def render() -> None:
             image_path = (SOURCE.parent / image.group(2)).resolve()
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.add_run().add_picture(str(image_path), width=Inches(6.45))
+            with Image.open(image_path) as bitmap:
+                ratio = bitmap.width / bitmap.height
+            max_width, max_height = 6.45, 7.25
+            width = min(max_width, max_height * ratio)
+            p.add_run().add_picture(str(image_path), width=Inches(width))
             figure_number += 1
             cap = doc.add_paragraph(image.group(1), style="Caption")
             cap.alignment = WD_ALIGN_PARAGRAPH.CENTER

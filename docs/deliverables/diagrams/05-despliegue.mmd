@@ -1,0 +1,14 @@
+flowchart TB
+  subgraph mac["Mac de entrega (macOS, Apple Silicon)"]
+    vite["Proceso: Vite<br/>:5173 (dev) o preview<br/>proxy /api → :8000"]
+    uv["Proceso: uvicorn k9_expert.serve<br/>127.0.0.1:8000"]
+    wk["Proceso: k9_expert.worker<br/>concurrencia 1"]
+    ol["Proceso: ollama serve<br/>127.0.0.1:11434<br/>~2–3 GB por modelo cargado"]
+    data[("data/<br/>k9.sqlite · index/ (Chroma) · files/ · cache/ · backups/")]
+  end
+  browser["Navegador (misma Mac o móvil en LAN)"] -->|HTTP| vite
+  vite --> uv
+  uv --> ol
+  wk --> ol
+  uv --> data
+  wk --> data

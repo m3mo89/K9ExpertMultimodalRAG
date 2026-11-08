@@ -11,5 +11,5 @@ Plantilla de la sección 8 del enunciado: Estado, Contexto, Decisión, Alternati
 | [ADR-05](ADR-05-ciclo-de-agente.md) | Ciclo acotado recuperar-evaluar-reformular | Aceptada |
 | [ADR-06](ADR-06-persistencia-vectorial.md) | Chroma por generaciones + SQLite como fuente de verdad | Aceptada |
 | [ADR-07](ADR-07-seleccion-de-modelos-de-lenguaje.md) | Alias `simple`, `complex` y `fallback` | **Provisional** (G1 no superada) |
-| [ADR-08](ADR-08-modelo-de-embeddings.md) | Modelo de embeddings | **Provisional** (falta segundo modelo) |
+| [ADR-08](ADR-08-modelo-de-embeddings.md) | Nomic frente a BGE-M3 | Aceptada (comparación completada el 2026-11-06; BGE-M3 requiere calibración propia) |
 | [ADR-09](ADR-09-puntuacion-determinista.md) | Puntuación determinista de BreedMatch | Aceptada |

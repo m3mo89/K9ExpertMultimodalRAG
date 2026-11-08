@@ -1,0 +1,23 @@
+sequenceDiagram
+  autonumber
+  participant Or as C2 Orquestador
+  participant RET as C5 SnapshotRetriever
+  participant SUF as C5 EvidenceSufficiencyPolicy
+  participant RF as C2 DomainPreservingReformulator
+  participant GW as C6 Gateway
+  Or->>RET: retrieve(consulta original, filtros)
+  RET-->>Or: evidencia (máx. similitud < 0.68)
+  Or->>SUF: evaluate
+  SUF-->>Or: insuficiente (weak_evidence)
+  Or->>RF: reformular(consulta, evidencia)
+  RF-->>Or: «Información documental sobre razas y perros de caza: …»
+  Or->>RET: retrieve(consulta reformulada, mismos filtros)
+  RET-->>Or: evidencia
+  Or->>SUF: evaluate
+  alt suficiente
+    SUF-->>Or: ok
+    Or->>GW: generar con la segunda evidencia (ruta complex · agent_reformulation)
+  else sigue insuficiente en la iteración máxima
+    SUF-->>Or: insuficiente
+    Or-->>Or: abstención sin generación y decisiones registradas en la traza
+  end
